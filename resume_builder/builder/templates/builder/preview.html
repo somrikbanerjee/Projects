@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Resume Preview – {{ resume.personal.name }}</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: #f0f4f8;
+      color: #1a202c;
+    }
+
+    .toolbar {
+      background: linear-gradient(135deg, #1e3a5f 0%, #2d6a9f 100%);
+      color: white;
+      padding: 0.9rem 2rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+    .toolbar-left { display: flex; align-items: center; gap: 1rem; }
+    .toolbar h2 { font-size: 1.1rem; font-weight: 600; }
+    .back-link {
+      color: rgba(255,255,255,0.85);
+      text-decoration: none;
+      font-size: 0.88rem;
+      display: flex;
+      align-items: center;
+      gap: 0.3rem;
+      border: 1px solid rgba(255,255,255,0.3);
+      padding: 0.35rem 0.8rem;
+      border-radius: 5px;
+      transition: background 0.15s;
+    }
+    .back-link:hover { background: rgba(255,255,255,0.15); }
+    .btn-download {
+      background: white;
+      color: #1e3a5f;
+      border: none;
+      border-radius: 7px;
+      padding: 0.55rem 1.4rem;
+      font-size: 0.92rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background 0.15s, transform 0.1s;
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+    .btn-download:hover { background: #ebf8ff; transform: translateY(-1px); }
+    .page-wrap { display: flex; justify-content: center; padding: 2rem 1rem 4rem; }
+
+    /* ---- ATS Resume Styles ---- */
+    .resume {
+      width: 8.5in;
+      min-height: 11in;
+      background: white;
+      padding: 0.75in 0.75in 0.75in 0.75in;
+      font-family: Arial, Helvetica, sans-serif;
+      font-size: 10.5pt;
+      color: #000;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.12);
+      line-height: 1.45;
+    }
+    .resume-header { text-align: center; margin-bottom: 14px; border-bottom: 2px solid #1e3a5f; padding-bottom: 10px; }
+    .resume-name { font-size: 22pt; font-weight: 700; letter-spacing: 0.5px; color: #1a202c; text-transform: uppercase; }
+    .resume-contact { margin-top: 5px; font-size: 9.5pt; color: #333; display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 16px; }
+    .resume-contact span::before { content: ""; }
+    .resume-contact a { color: #2d6a9f; text-decoration: none; }
+    .resume-section { margin-bottom: 14px; }
+    .section-title {
+      font-size: 11pt;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: #1e3a5f;
+      border-bottom: 1.5px solid #1e3a5f;
+      padding-bottom: 2px;
+      margin-bottom: 8px;
+    }
+    .summary-text { font-size: 10pt; color: #222; line-height: 1.55; }
+    .exp-entry, .edu-entry, .cert-entry, .proj-entry { margin-bottom: 10px; }
+    .exp-header, .edu-header, .proj-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+    }
+    .company-name, .institution-name, .proj-name { font-weight: 700; font-size: 10.5pt; color: #111; }
+    .date-range { font-size: 9.5pt; color: #555; white-space: nowrap; }
+    .exp-location { font-size: 9.5pt; color: #555; font-style: italic; margin-bottom: 3px; }
+    .edu-degree { font-size: 10pt; color: #333; margin-top: 1px; }
+    .cert-entry { font-size: 10pt; color: #222; }
+    .cert-name { font-weight: 600; }
+    .cert-issuer { color: #555; }
+    .cert-date { color: #666; font-size: 9.5pt; }
+    .proj-tech { font-size: 9.5pt; color: #2d6a9f; font-style: italic; }
+    .bullet-list { margin: 4px 0 0 18px; padding: 0; }
+    .bullet-list li { font-size: 10pt; color: #222; margin-bottom: 2px; line-height: 1.45; }
+  </style>
+</head>
+<body>
+
+<div class="toolbar">
+  <div class="toolbar-left">
+    <a href="{% url 'index' %}" class="back-link">&#8592; Edit</a>
+    <h2>Resume Preview</h2>
+  </div>
+  <form method="POST" action="{% url 'download_pdf' %}">
+    {% csrf_token %}
+    <!-- Re-submit all resume data for PDF generation -->
+    <input type="hidden" name="name" value="{{ resume.personal.name }}" />
+    <input type="hidden" name="phone" value="{{ resume.personal.phone }}" />
+    <input type="hidden" name="email" value="{{ resume.personal.email }}" />
+    <input type="hidden" name="linkedin" value="{{ resume.personal.linkedin }}" />
+    <input type="hidden" name="location" value="{{ resume.personal.location }}" />
+    <input type="hidden" name="summary" value="{{ resume.summary }}" />
+    {% for exp in resume.experiences %}{% with forloop.counter0 as i %}
+    <input type="hidden" name="exp-{{ i }}-company" value="{{ exp.company }}" />
+    <input type="hidden" name="exp-{{ i }}-location" value="{{ exp.location }}" />
+    <input type="hidden" name="exp-{{ i }}-start_month" value="{{ exp.start_month }}" />
+    <input type="hidden" name="exp-{{ i }}-start_year" value="{{ exp.start_year }}" />
+    <input type="hidden" name="exp-{{ i }}-end_month" value="{{ exp.end_month }}" />
+    <input type="hidden" name="exp-{{ i }}-end_year" value="{{ exp.end_year }}" />
+    {% if exp.is_present %}<input type="hidden" name="exp-{{ i }}-is_present" value="on" />{% endif %}
+    <input type="hidden" name="exp-{{ i }}-description" value="{{ exp.description }}" />
+    {% endwith %}{% endfor %}
+    {% for edu in resume.educations %}{% with forloop.counter0 as i %}
+    <input type="hidden" name="edu-{{ i }}-institution" value="{{ edu.institution }}" />
+    <input type="hidden" name="edu-{{ i }}-degree" value="{{ edu.degree }}" />
+    <input type="hidden" name="edu-{{ i }}-field" value="{{ edu.field }}" />
+    <input type="hidden" name="edu-{{ i }}-graduation_month" value="{{ edu.graduation_month }}" />
+    <input type="hidden" name="edu-{{ i }}-graduation_year" value="{{ edu.graduation_year }}" />
+    {% endwith %}{% endfor %}
+    {% for cert in resume.certifications %}{% with forloop.counter0 as i %}
+    <input type="hidden" name="cert-{{ i }}-name" value="{{ cert.name }}" />
+    <input type="hidden" name="cert-{{ i }}-issuer" value="{{ cert.issuer }}" />
+    <input type="hidden" name="cert-{{ i }}-date" value="{{ cert.date }}" />
+    {% endwith %}{% endfor %}
+    {% for proj in resume.projects %}{% with forloop.counter0 as i %}
+    <input type="hidden" name="proj-{{ i }}-name" value="{{ proj.name }}" />
+    <input type="hidden" name="proj-{{ i }}-tech" value="{{ proj.tech }}" />
+    <input type="hidden" name="proj-{{ i }}-description" value="{{ proj.description }}" />
+    {% endwith %}{% endfor %}
+    <button type="submit" class="btn-download">&#8659; Download PDF</button>
+  </form>
+</div>
+
+<div class="page-wrap">
+  {% include "builder/resume_content.html" %}
+</div>
+
+</body>
+</html>

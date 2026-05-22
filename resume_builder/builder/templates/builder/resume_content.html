@@ -1,0 +1,106 @@
+{% comment %}
+Shared resume body — included by preview.html and resume_pdf.html.
+Context variable: resume (dict from parse_resume_data)
+{% endcomment %}
+
+<div class="resume">
+
+  <!-- ===== HEADER ===== -->
+  <div class="resume-header">
+    <h1 class="resume-name">{{ resume.personal.name }}</h1>
+    <div class="resume-contact">
+      {% if resume.personal.phone %}<span>{{ resume.personal.phone }}</span>{% endif %}
+      {% if resume.personal.email %}<span>{{ resume.personal.email }}</span>{% endif %}
+      {% if resume.personal.location %}<span>{{ resume.personal.location }}</span>{% endif %}
+      {% if resume.personal.linkedin %}<span><a href="{{ resume.personal.linkedin }}">{{ resume.personal.linkedin }}</a></span>{% endif %}
+    </div>
+  </div>
+
+  <!-- ===== SUMMARY ===== -->
+  {% if resume.summary %}
+  <div class="resume-section">
+    <div class="section-title">Professional Summary</div>
+    <p class="summary-text">{{ resume.summary }}</p>
+  </div>
+  {% endif %}
+
+  <!-- ===== EXPERIENCE ===== -->
+  {% if resume.experiences %}
+  <div class="resume-section">
+    <div class="section-title">Work Experience</div>
+    {% for exp in resume.experiences %}
+    <div class="exp-entry">
+      <div class="exp-header">
+        <span class="company-name">{{ exp.company }}</span>
+        <span class="date-range">
+          {% if exp.start_month %}{{ exp.start_month }}/{% endif %}{{ exp.start_year }}
+          &ndash;
+          {% if exp.is_present %}Present{% else %}{% if exp.end_month %}{{ exp.end_month }}/{% endif %}{{ exp.end_year }}{% endif %}
+        </span>
+      </div>
+      {% if exp.location %}<div class="exp-location">{{ exp.location }}</div>{% endif %}
+      {% if exp.bullets %}
+      <ul class="bullet-list">
+        {% for bullet in exp.bullets %}<li>{{ bullet }}</li>{% endfor %}
+      </ul>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <!-- ===== EDUCATION ===== -->
+  {% if resume.educations %}
+  <div class="resume-section">
+    <div class="section-title">Education</div>
+    {% for edu in resume.educations %}
+    <div class="edu-entry">
+      <div class="edu-header">
+        <span class="institution-name">{{ edu.institution }}</span>
+        <span class="date-range">
+          {% if edu.graduation_month %}{{ edu.graduation_month }}/{% endif %}{{ edu.graduation_year }}
+        </span>
+      </div>
+      <div class="edu-degree">
+        {{ edu.degree }}{% if edu.field %} &mdash; {{ edu.field }}{% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <!-- ===== CERTIFICATIONS ===== -->
+  {% if resume.certifications %}
+  <div class="resume-section">
+    <div class="section-title">Certifications</div>
+    {% for cert in resume.certifications %}
+    <div class="cert-entry">
+      <span class="cert-name">{{ cert.name }}</span>
+      {% if cert.issuer %}<span class="cert-issuer"> &mdash; {{ cert.issuer }}</span>{% endif %}
+      {% if cert.date %}<span class="cert-date"> ({{ cert.date }})</span>{% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <!-- ===== PROJECTS ===== -->
+  {% if resume.projects %}
+  <div class="resume-section">
+    <div class="section-title">Projects</div>
+    {% for proj in resume.projects %}
+    <div class="proj-entry">
+      <div class="proj-header">
+        <span class="proj-name">{{ proj.name }}</span>
+        {% if proj.tech %}<span class="proj-tech"> | {{ proj.tech }}</span>{% endif %}
+      </div>
+      {% if proj.bullets %}
+      <ul class="bullet-list">
+        {% for bullet in proj.bullets %}<li>{{ bullet }}</li>{% endfor %}
+      </ul>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+</div>

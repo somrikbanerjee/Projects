@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Resume Builder</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: #f0f4f8;
+      color: #1a202c;
+      min-height: 100vh;
+    }
+
+    header {
+      background: linear-gradient(135deg, #1e3a5f 0%, #2d6a9f 100%);
+      color: white;
+      padding: 1.5rem 2rem;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    }
+    header h1 { font-size: 1.6rem; font-weight: 700; letter-spacing: 0.3px; }
+    header p { font-size: 0.9rem; opacity: 0.85; margin-top: 2px; }
+
+    .container { max-width: 860px; margin: 0 auto; padding: 2rem 1.5rem 4rem; }
+
+    /* ---- Section card ---- */
+    .section-card {
+      background: white;
+      border-radius: 10px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+      margin-bottom: 1.5rem;
+      overflow: hidden;
+    }
+    .section-header {
+      background: #1e3a5f;
+      color: white;
+      padding: 0.75rem 1.25rem;
+      font-weight: 600;
+      font-size: 0.95rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .section-header .badge-optional {
+      font-size: 0.72rem;
+      background: rgba(255,255,255,0.2);
+      padding: 2px 8px;
+      border-radius: 20px;
+      font-weight: 400;
+    }
+    .section-body { padding: 1.25rem; }
+
+    /* ---- Form elements ---- */
+    .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+    .form-grid.three { grid-template-columns: 1fr 1fr 1fr; }
+    .form-grid.full { grid-template-columns: 1fr; }
+
+    .field { display: flex; flex-direction: column; gap: 4px; }
+    .field label { font-size: 0.8rem; font-weight: 600; color: #4a5568; text-transform: uppercase; letter-spacing: 0.4px; }
+    .field input, .field textarea, .field select {
+      border: 1.5px solid #cbd5e0;
+      border-radius: 6px;
+      padding: 0.5rem 0.65rem;
+      font-size: 0.92rem;
+      color: #1a202c;
+      background: #fafafa;
+      transition: border-color 0.15s, box-shadow 0.15s;
+      width: 100%;
+      font-family: inherit;
+    }
+    .field input:focus, .field textarea:focus, .field select:focus {
+      outline: none;
+      border-color: #2d6a9f;
+      box-shadow: 0 0 0 3px rgba(45,106,159,0.12);
+      background: white;
+    }
+    .field textarea { resize: vertical; min-height: 90px; }
+    .field .hint { font-size: 0.75rem; color: #718096; margin-top: 2px; }
+
+    /* ---- Dynamic entry blocks ---- */
+    .entry-block {
+      border: 1.5px solid #e2e8f0;
+      border-radius: 8px;
+      padding: 1rem;
+      margin-bottom: 0.75rem;
+      position: relative;
+      background: #fafafa;
+    }
+    .entry-block .entry-title {
+      font-size: 0.8rem;
+      font-weight: 700;
+      color: #2d6a9f;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 0.75rem;
+    }
+    .remove-btn {
+      position: absolute;
+      top: 0.75rem;
+      right: 0.75rem;
+      background: #fed7d7;
+      color: #c53030;
+      border: none;
+      border-radius: 50%;
+      width: 26px;
+      height: 26px;
+      font-size: 1rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      line-height: 1;
+      transition: background 0.15s;
+    }
+    .remove-btn:hover { background: #fc8181; }
+
+    .add-btn {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      background: #ebf4ff;
+      color: #2b6cb0;
+      border: 1.5px dashed #90cdf4;
+      border-radius: 7px;
+      padding: 0.55rem 1rem;
+      font-size: 0.88rem;
+      font-weight: 600;
+      cursor: pointer;
+      margin-top: 0.25rem;
+      transition: background 0.15s;
+      width: 100%;
+      justify-content: center;
+    }
+    .add-btn:hover { background: #bee3f8; border-color: #4299e1; }
+
+    /* ---- Present toggle ---- */
+    .present-row {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.4rem 0;
+    }
+    .present-row input[type=checkbox] { width: 16px; height: 16px; cursor: pointer; accent-color: #2d6a9f; }
+    .present-row label { font-size: 0.87rem; color: #4a5568; cursor: pointer; font-weight: 500; }
+    .end-date-fields { transition: opacity 0.2s; }
+
+    /* ---- Month/Year pair ---- */
+    .month-year { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
+
+    /* ---- Submit buttons ---- */
+    .action-bar {
+      display: flex;
+      gap: 1rem;
+      margin-top: 2rem;
+      justify-content: flex-end;
+    }
+    .btn-preview {
+      background: #2d6a9f;
+      color: white;
+      border: none;
+      border-radius: 7px;
+      padding: 0.75rem 2rem;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s, transform 0.1s;
+    }
+    .btn-preview:hover { background: #1e3a5f; transform: translateY(-1px); }
+
+    @media (max-width: 600px) {
+      .form-grid, .form-grid.three { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>Resume Builder</h1>
+    <p>Create an ATS-friendly resume in minutes</p>
+  </div>
+</header>
+
+<div class="container">
+  <form method="POST" action="{% url 'preview' %}">
+    {% csrf_token %}
+
+    <!-- ===== PERSONAL DETAILS ===== -->
+    <div class="section-card">
+      <div class="section-header">&#128100; Personal Details</div>
+      <div class="section-body">
+        <div class="form-grid" style="margin-bottom:1rem;">
+          <div class="field">
+            <label>Full Name *</label>
+            <input type="text" name="name" placeholder="Jane Doe" required />
+          </div>
+          <div class="field">
+            <label>Phone Number *</label>
+            <input type="tel" name="phone" placeholder="+1 (555) 000-0000" required />
+          </div>
+        </div>
+        <div class="form-grid" style="margin-bottom:1rem;">
+          <div class="field">
+            <label>Primary Email *</label>
+            <input type="email" name="email" placeholder="jane@example.com" required />
+          </div>
+          <div class="field">
+            <label>LinkedIn Profile URL</label>
+            <input type="url" name="linkedin" placeholder="https://linkedin.com/in/janedoe" />
+          </div>
+        </div>
+        <div class="form-grid full">
+          <div class="field">
+            <label>Base Location *</label>
+            <input type="text" name="location" placeholder="San Francisco, CA" required />
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== PROFESSIONAL SUMMARY ===== -->
+    <div class="section-card">
+      <div class="section-header">&#128221; Professional Summary</div>
+      <div class="section-body">
+        <div class="field">
+          <textarea name="summary" placeholder="Write 2–4 sentences highlighting your professional identity, core strengths, and career goals..." rows="4"></textarea>
+          <span class="hint">Keep it concise and keyword-rich for ATS.</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== EXPERIENCE ===== -->
+    <div class="section-card">
+      <div class="section-header">&#128188; Work Experience</div>
+      <div class="section-body">
+        <div id="exp-container"></div>
+        <button type="button" class="add-btn" onclick="addEntry('exp')">&#43; Add Experience</button>
+      </div>
+    </div>
+
+    <!-- ===== EDUCATION ===== -->
+    <div class="section-card">
+      <div class="section-header">&#127891; Education</div>
+      <div class="section-body">
+        <div id="edu-container"></div>
+        <button type="button" class="add-btn" onclick="addEntry('edu')">&#43; Add Education</button>
+      </div>
+    </div>
+
+    <!-- ===== CERTIFICATIONS (optional) ===== -->
+    <div class="section-card">
+      <div class="section-header">&#127942; Certifications <span class="badge-optional">Optional</span></div>
+      <div class="section-body">
+        <div id="cert-container"></div>
+        <button type="button" class="add-btn" onclick="addEntry('cert')">&#43; Add Certification</button>
+      </div>
+    </div>
+
+    <!-- ===== PROJECTS (optional) ===== -->
+    <div class="section-card">
+      <div class="section-header">&#128196; Projects <span class="badge-optional">Optional</span></div>
+      <div class="section-body">
+        <div id="proj-container"></div>
+        <button type="button" class="add-btn" onclick="addEntry('proj')">&#43; Add Project</button>
+      </div>
+    </div>
+
+    <div class="action-bar">
+      <button type="submit" class="btn-preview">Preview Resume &#8594;</button>
+    </div>
+  </form>
+</div>
+
+<script>
+const MONTHS = [
+  ['01','January'],['02','February'],['03','March'],['04','April'],
+  ['05','May'],['06','June'],['07','July'],['08','August'],
+  ['09','September'],['10','October'],['11','November'],['12','December']
+];
+
+const counters = { exp: 0, edu: 0, cert: 0, proj: 0 };
+
+function monthOptions() {
+  return MONTHS.map(([v,l]) => `<option value="${v}">${l}</option>`).join('');
+}
+
+function yearOptions(from = 1980, to = new Date().getFullYear() + 2) {
+  let opts = '';
+  for (let y = to; y >= from; y--) opts += `<option value="${y}">${y}</option>`;
+  return opts;
+}
+
+function addEntry(type) {
+  const idx = counters[type]++;
+  const container = document.getElementById(`${type}-container`);
+  const div = document.createElement('div');
+  div.className = 'entry-block';
+  div.id = `${type}-${idx}`;
+
+  if (type === 'exp') {
+    div.innerHTML = `
+      <div class="entry-title">Experience #${idx + 1}</div>
+      <button type="button" class="remove-btn" onclick="removeEntry('${type}', ${idx})" title="Remove">&#215;</button>
+      <div class="form-grid" style="margin-bottom:0.75rem;">
+        <div class="field">
+          <label>Company Name *</label>
+          <input type="text" name="exp-${idx}-company" placeholder="Acme Corp" required />
+        </div>
+        <div class="field">
+          <label>Work Location</label>
+          <input type="text" name="exp-${idx}-location" placeholder="New York, NY (Remote)" />
+        </div>
+      </div>
+      <div class="form-grid three" style="margin-bottom:0.5rem;">
+        <div class="field">
+          <label>Start Month</label>
+          <select name="exp-${idx}-start_month"><option value="">Month</option>${monthOptions()}</select>
+        </div>
+        <div class="field">
+          <label>Start Year</label>
+          <select name="exp-${idx}-start_year"><option value="">Year</option>${yearOptions()}</select>
+        </div>
+        <div class="field" style="justify-content:flex-end;">
+          <label>&nbsp;</label>
+          <div class="present-row">
+            <input type="checkbox" id="exp-${idx}-present-cb" name="exp-${idx}-is_present" onchange="togglePresent(${idx})" />
+            <label for="exp-${idx}-present-cb">Currently Working Here</label>
+          </div>
+        </div>
+      </div>
+      <div class="form-grid" id="exp-${idx}-end-fields" style="margin-bottom:0.75rem;">
+        <div class="field">
+          <label>End Month</label>
+          <select name="exp-${idx}-end_month"><option value="">Month</option>${monthOptions()}</select>
+        </div>
+        <div class="field">
+          <label>End Year</label>
+          <select name="exp-${idx}-end_year"><option value="">Year</option>${yearOptions()}</select>
+        </div>
+      </div>
+      <div class="field">
+        <label>Description / Responsibilities</label>
+        <textarea name="exp-${idx}-description" placeholder="• Led a team of 5 engineers to deliver X feature&#10;• Reduced load time by 40% by optimizing Y&#10;• (Enter each bullet on a new line)"></textarea>
+        <span class="hint">Enter each responsibility on a new line. It will appear as a bullet point.</span>
+      </div>`;
+  } else if (type === 'edu') {
+    div.innerHTML = `
+      <div class="entry-title">Education #${idx + 1}</div>
+      <button type="button" class="remove-btn" onclick="removeEntry('${type}', ${idx})" title="Remove">&#215;</button>
+      <div class="form-grid" style="margin-bottom:0.75rem;">
+        <div class="field">
+          <label>Institution *</label>
+          <input type="text" name="edu-${idx}-institution" placeholder="MIT" required />
+        </div>
+        <div class="field">
+          <label>Degree *</label>
+          <input type="text" name="edu-${idx}-degree" placeholder="Bachelor of Science" required />
+        </div>
+      </div>
+      <div class="form-grid three">
+        <div class="field" style="grid-column: span 2;">
+          <label>Field of Study</label>
+          <input type="text" name="edu-${idx}-field" placeholder="Computer Science" />
+        </div>
+        <div class="field" style="grid-column:1;">
+          <label>Grad Month</label>
+          <select name="edu-${idx}-graduation_month"><option value="">Month</option>${monthOptions()}</select>
+        </div>
+        <div class="field">
+          <label>Grad Year</label>
+          <select name="edu-${idx}-graduation_year"><option value="">Year</option>${yearOptions()}</select>
+        </div>
+      </div>`;
+  } else if (type === 'cert') {
+    div.innerHTML = `
+      <div class="entry-title">Certification #${idx + 1}</div>
+      <button type="button" class="remove-btn" onclick="removeEntry('${type}', ${idx})" title="Remove">&#215;</button>
+      <div class="form-grid three">
+        <div class="field">
+          <label>Certification Name *</label>
+          <input type="text" name="cert-${idx}-name" placeholder="AWS Solutions Architect" />
+        </div>
+        <div class="field">
+          <label>Issuing Organization</label>
+          <input type="text" name="cert-${idx}-issuer" placeholder="Amazon Web Services" />
+        </div>
+        <div class="field">
+          <label>Date Obtained</label>
+          <input type="month" name="cert-${idx}-date" />
+        </div>
+      </div>`;
+  } else if (type === 'proj') {
+    div.innerHTML = `
+      <div class="entry-title">Project #${idx + 1}</div>
+      <button type="button" class="remove-btn" onclick="removeEntry('${type}', ${idx})" title="Remove">&#215;</button>
+      <div class="form-grid" style="margin-bottom:0.75rem;">
+        <div class="field">
+          <label>Project Name *</label>
+          <input type="text" name="proj-${idx}-name" placeholder="Inventory Management System" />
+        </div>
+        <div class="field">
+          <label>Technologies Used</label>
+          <input type="text" name="proj-${idx}-tech" placeholder="Python, Django, PostgreSQL, React" />
+        </div>
+      </div>
+      <div class="field">
+        <label>Description</label>
+        <textarea name="proj-${idx}-description" placeholder="• Built a REST API handling 10k requests/day&#10;• Implemented role-based access control&#10;(Enter each point on a new line)"></textarea>
+        <span class="hint">Enter each point on a new line. It will appear as a bullet point.</span>
+      </div>`;
+  }
+
+  container.appendChild(div);
+}
+
+function removeEntry(type, idx) {
+  const el = document.getElementById(`${type}-${idx}`);
+  if (el) el.remove();
+}
+
+function togglePresent(idx) {
+  const cb = document.getElementById(`exp-${idx}-present-cb`);
+  const endFields = document.getElementById(`exp-${idx}-end-fields`);
+  if (cb.checked) {
+    endFields.style.opacity = '0.35';
+    endFields.style.pointerEvents = 'none';
+  } else {
+    endFields.style.opacity = '1';
+    endFields.style.pointerEvents = 'auto';
+  }
+}
+
+// Pre-add one entry for each section on load
+addEntry('exp');
+addEntry('edu');
+</script>
+</body>
+</html>
