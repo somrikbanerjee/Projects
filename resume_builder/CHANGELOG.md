@@ -4,6 +4,25 @@ All notable changes to this project are documented here.
 
 ---
 
+## [0.3.3] — 2026-05-23
+
+### Added
+- **Project link field** — each Project entry now has a "Project Link" URL input. The URL renders on its own line below the project name/tech row in the resume, styled as a small clickable link (`.ref-link`). Included in save/load and PDF export.
+- **Certification link field** — each Certification entry now has a "Credential / Verify URL" input. The URL renders below the certification name/issuer/date line. Included in save/load and PDF export.
+- **README.md** — project documentation added at the repository root, covering feature overview, requirements, setup instructions, project structure, URL reference, and the `.resume` file format.
+
+### Changed
+- **Resume header contact layout** — phone, email, and location are now guaranteed to appear on the first line; LinkedIn and GitHub are always on a second line below. Implemented by splitting `.resume-contact` into two `.contact-row` divs (column flex) instead of a single wrapping flex row. The second row is omitted entirely if neither LinkedIn nor GitHub is provided.
+
+### Files changed
+- `builder/views.py` — `get_list` calls for certifications and projects updated to include `"link"` in their field lists.
+- `builder/templates/builder/resume_content.html` — contact section restructured into two `.contact-row` divs; `.ref-link` div added to cert and project entries.
+- `builder/templates/builder/resume_pdf.html` — `.resume-contact` changed to `flex-direction: column`; `.contact-row` and `.ref-link` CSS rules added.
+- `builder/templates/builder/index.html` — `.resume-contact` and `.contact-row` preview CSS updated; `.ref-link` CSS added; `addEntry('cert')` and `addEntry('proj')` updated with link URL inputs; `populateForm` updated for `cert.link` and `proj.link`.
+- `README.md` — created.
+
+---
+
 ## [0.3.2] — 2026-05-23
 
 ### Fixed

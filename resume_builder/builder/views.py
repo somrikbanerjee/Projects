@@ -31,8 +31,8 @@ def parse_resume_data(post):
         return items
 
     educations = get_list("edu", ["institution", "degree", "field", "graduation_year"])
-    certifications = get_list("cert", ["name", "issuer", "date"])
-    projects = get_list("proj", ["name", "tech", "description"])
+    certifications = get_list("cert", ["name", "issuer", "date", "link"])
+    projects = get_list("proj", ["name", "tech", "link", "description"])
     for proj in projects:
         proj["bullets"] = [b.strip() for b in proj.get("description", "").splitlines() if b.strip()]
 
