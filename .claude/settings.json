@@ -15,7 +15,19 @@
       "Bash(grep -v \"^$\")",
       "Bash(pdftotext -layout -f 1 -l 1 /tmp/iter1.pdf -)",
       "Bash(pdftotext -layout /tmp/iter1.pdf -)",
-      "Bash(pdfinfo /tmp/iter1.pdf)"
+      "Bash(pdfinfo /tmp/iter1.pdf)",
+      "Bash(pip install *)",
+      "Bash(python data/create_dummy.py)",
+      "Bash(streamlit run *)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:8501)",
+      "Bash(pkill -f \"streamlit run app.py\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:8502)",
+      "Bash(pkill -f streamlit)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:8503)",
+      "Bash(python -m streamlit run app.py --server.port 8504 --server.headless true)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:8504)",
+      "Read(//tmp/**)",
+      "Bash(python -c ' *)"
     ]
   }
 }
