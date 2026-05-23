@@ -30,7 +30,7 @@ def parse_resume_data(post):
             i += 1
         return items
 
-    educations = get_list("edu", ["institution", "degree", "field", "graduation_month", "graduation_year"])
+    educations = get_list("edu", ["institution", "degree", "field", "graduation_year"])
     certifications = get_list("cert", ["name", "issuer", "date"])
     projects = get_list("proj", ["name", "tech", "description"])
     for proj in projects:

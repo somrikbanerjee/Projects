@@ -57,9 +57,7 @@ Context variable: resume (dict from parse_resume_data)
     <div class="edu-entry">
       <div class="edu-header">
         <span class="institution-name">{{ edu.institution }}</span>
-        <span class="date-range">
-          {% if edu.graduation_month %}{{ edu.graduation_month }}/{% endif %}{{ edu.graduation_year }}
-        </span>
+        <span class="date-range">{{ edu.graduation_year }}</span>
       </div>
       <div class="edu-degree">
         {{ edu.degree }}{% if edu.field %} &mdash; {{ edu.field }}{% endif %}

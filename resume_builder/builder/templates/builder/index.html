@@ -406,11 +406,10 @@ function addEntry(type, silent=false) {
         <div class="field"><label>Institution *</label><input type="text" name="edu-${idx}-institution" placeholder="MIT" /></div>
         <div class="field"><label>Degree *</label><input type="text" name="edu-${idx}-degree" placeholder="Bachelor of Science" /></div>
       </div>
-      <div class="fg fg-3">
+      <div class="fg fg-2" style="margin-bottom:.7rem;">
         <div class="field" style="grid-column:span 2;"><label>Field of Study</label><input type="text" name="edu-${idx}-field" placeholder="Computer Science" /></div>
       </div>
-      <div class="fg fg-2" style="margin-top:.7rem;">
-        <div class="field"><label>Graduation Month</label><select name="edu-${idx}-graduation_month"><option value="">Month</option>${monthOpts()}</select></div>
+      <div class="fg fg-1">
         <div class="field"><label>Graduation Year</label><select name="edu-${idx}-graduation_year"><option value="">Year</option>${yearOpts()}</select></div>
       </div>`;
   } else if (type === 'cert') {
@@ -602,11 +601,10 @@ function populateForm(data) {
   (data.educations || []).forEach(edu => {
     const idx = counters.edu;
     addEntry('edu', true);
-    setFval(`edu-${idx}-institution`,       edu.institution       || '');
-    setFval(`edu-${idx}-degree`,            edu.degree            || '');
-    setFval(`edu-${idx}-field`,             edu.field             || '');
-    setFval(`edu-${idx}-graduation_month`,  edu.graduation_month  || '');
-    setFval(`edu-${idx}-graduation_year`,   edu.graduation_year   || '');
+    setFval(`edu-${idx}-institution`,      edu.institution     || '');
+    setFval(`edu-${idx}-degree`,           edu.degree          || '');
+    setFval(`edu-${idx}-field`,            edu.field           || '');
+    setFval(`edu-${idx}-graduation_year`,  edu.graduation_year || '');
   });
 
   (data.certifications || []).forEach(cert => {

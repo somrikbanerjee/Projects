@@ -4,6 +4,18 @@ All notable changes to this project are documented here.
 
 ---
 
+## [0.2.1] — 2026-05-23
+
+### Changed
+- Education section: removed the Graduation Month field; only Graduation Year is collected and displayed on the resume.
+
+### Files changed
+- `builder/templates/builder/index.html` — removed graduation month select from `addEntry('edu')` and `populateForm`.
+- `builder/views.py` — removed `graduation_month` from the education field list in `parse_resume_data`.
+- `builder/templates/builder/resume_content.html` — education date range now renders year only.
+
+---
+
 ## [0.2.0] — 2026-05-23
 
 ### Added
