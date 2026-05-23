@@ -164,6 +164,19 @@
     .bullet-list { margin: 3px 0 0 16px; padding: 0; }
     .bullet-list li { font-size: 10pt; margin-bottom: 2px; line-height: 1.45; }
 
+    /* ---- Contact icons ---- */
+    .contact-item { display: inline-flex; align-items: center; gap: 0.22em; }
+    .contact-icon { width: 0.9em; height: 0.9em; flex-shrink: 0; vertical-align: middle; }
+
+    /* ---- Experience sub-header (designation | location) ---- */
+    .exp-subheader { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 2px; }
+    .exp-designation { font-style: italic; font-size: 9.5pt; color: #333; }
+
+    /* ---- Skills ---- */
+    .skills-row { display: flex; gap: 6px; margin-bottom: 3px; font-size: 10pt; }
+    .skills-label { font-weight: 700; min-width: 5.5em; color: #1e3a5f; }
+    .skills-list { color: #222; }
+
     /* ---- Scale notice (shown when preview is shrunk to fit one page) ---- */
     .scale-notice {
       background: #fffbeb; color: #92400e; border: 1px solid #fbbf24;
@@ -251,10 +264,11 @@
           </div>
           <div class="fg fg-2">
             <div class="field"><label>Primary Email *</label><input type="email" name="email" placeholder="jane@example.com" required /></div>
-            <div class="field"><label>LinkedIn Profile URL</label><input type="url" name="linkedin" placeholder="https://linkedin.com/in/janedoe" /></div>
-          </div>
-          <div class="fg fg-1">
             <div class="field"><label>Base Location *</label><input type="text" name="location" placeholder="San Francisco, CA" required /></div>
+          </div>
+          <div class="fg fg-2">
+            <div class="field"><label>LinkedIn Profile URL</label><input type="url" name="linkedin" placeholder="https://linkedin.com/in/janedoe" /></div>
+            <div class="field"><label>GitHub Profile URL</label><input type="url" name="github" placeholder="https://github.com/username" /></div>
           </div>
         </div>
       </div>
@@ -266,6 +280,27 @@
           <div class="field">
             <textarea name="summary" placeholder="Write 2–4 sentences highlighting your professional identity, core strengths, and career goals..." rows="4"></textarea>
             <span class="hint">Keep it concise and keyword-rich for ATS.</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== SKILLS ===== -->
+      <div class="section-card">
+        <div class="section-header">&#9889; Skills</div>
+        <div class="section-body">
+          <div class="fg fg-1" style="margin-bottom:.85rem;">
+            <div class="field">
+              <label>Primary Skills</label>
+              <input type="text" name="skills_primary" placeholder="Python, Django, PostgreSQL, Docker, AWS" />
+              <span class="hint">Enter skills separated by commas.</span>
+            </div>
+          </div>
+          <div class="fg fg-1">
+            <div class="field">
+              <label>Secondary Skills</label>
+              <input type="text" name="skills_secondary" placeholder="React, JavaScript, HTML/CSS, Git, Linux" />
+              <span class="hint">Enter skills separated by commas.</span>
+            </div>
           </div>
         </div>
       </div>
@@ -386,6 +421,9 @@ function addEntry(type, silent=false) {
       <button type="button" class="remove-btn" onclick="removeEntry('exp',${idx})" title="Remove">&#215;</button>
       <div class="fg fg-2" style="margin-bottom:.7rem;">
         <div class="field"><label>Company Name *</label><input type="text" name="exp-${idx}-company" placeholder="Acme Corp" /></div>
+        <div class="field"><label>Job Title / Designation</label><input type="text" name="exp-${idx}-designation" placeholder="Senior Software Engineer" /></div>
+      </div>
+      <div class="fg fg-1" style="margin-bottom:.7rem;">
         <div class="field"><label>Work Location</label><input type="text" name="exp-${idx}-location" placeholder="New York, NY (Remote)" /></div>
       </div>
       <div class="fg fg-3" style="margin-bottom:.5rem;">
@@ -622,13 +660,17 @@ function populateForm(data) {
   setFval('phone',    p.phone    || '');
   setFval('email',    p.email    || '');
   setFval('linkedin', p.linkedin || '');
+  setFval('github',   p.github   || '');
   setFval('location', p.location || '');
   setFval('summary',  data.summary || '');
+  setFval('skills_primary',   data.skills?.primary   || '');
+  setFval('skills_secondary', data.skills?.secondary || '');
 
   (data.experiences || []).forEach(exp => {
     const idx = counters.exp;
     addEntry('exp', true);
     setFval(`exp-${idx}-company`,     exp.company     || '');
+    setFval(`exp-${idx}-designation`, exp.designation || '');
     setFval(`exp-${idx}-location`,    exp.location    || '');
     setFval(`exp-${idx}-start_month`, exp.start_month || '');
     setFval(`exp-${idx}-start_year`,  exp.start_year  || '');

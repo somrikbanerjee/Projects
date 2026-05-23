@@ -8,7 +8,7 @@ import weasyprint
 
 def parse_resume_data(post):
     exp_fields = [
-        "company", "start_month", "start_year",
+        "company", "designation", "start_month", "start_year",
         "end_month", "end_year", "is_present", "location", "description",
     ]
     experiences = []
@@ -42,9 +42,14 @@ def parse_resume_data(post):
             "phone": post.get("phone", "").strip(),
             "email": post.get("email", "").strip(),
             "linkedin": post.get("linkedin", "").strip(),
+            "github": post.get("github", "").strip(),
             "location": post.get("location", "").strip(),
         },
         "summary": post.get("summary", "").strip(),
+        "skills": {
+            "primary": post.get("skills_primary", "").strip(),
+            "secondary": post.get("skills_secondary", "").strip(),
+        },
         "experiences": experiences,
         "educations": educations,
         "certifications": [c for c in certifications if c.get("name")],
@@ -86,6 +91,7 @@ def save_resume(request):
             "version": "1.0",
             "personal": data["personal"],
             "summary": data["summary"],
+            "skills": data["skills"],
             "experiences": [
                 {k: v for k, v in exp.items() if k != "bullets"}
                 for exp in data["experiences"]

@@ -1,7 +1,14 @@
 {% comment %}
-Shared resume body — included by preview.html and resume_pdf.html.
+Shared resume body — included by index.html (preview) and resume_pdf.html.
 Context variable: resume (dict from parse_resume_data)
 {% endcomment %}
+
+{# ── Inline SVG icon macros ─────────────────────────────────────────────── #}
+{% with phone_icon='<svg class="contact-icon" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z"/></svg>' %}
+{% with email_icon='<svg class="contact-icon" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z"/></svg>' %}
+{% with location_icon='<svg class="contact-icon" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>' %}
+{% with linkedin_icon='<svg class="contact-icon" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M19 3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14m-.5 15.5v-5.3a3.26 3.26 0 0 0-3.26-3.26c-.85 0-1.84.52-2.32 1.3v-1.11h-2.79v8.37h2.79v-4.93c0-.77.62-1.4 1.39-1.4a1.4 1.4 0 0 1 1.4 1.4v4.93h2.79M6.88 8.56a1.68 1.68 0 0 0 1.68-1.68c0-.93-.75-1.69-1.68-1.69a1.69 1.69 0 0 0-1.69 1.69c0 .93.76 1.68 1.69 1.68m1.39 9.94v-8.37H5.5v8.37h2.77z"/></svg>' %}
+{% with github_icon='<svg class="contact-icon" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M12 0C5.374 0 0 5.373 0 12c0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576C20.566 21.797 24 17.3 24 12c0-6.627-5.373-12-12-12z"/></svg>' %}
 
 <div class="resume">
 
@@ -9,10 +16,21 @@ Context variable: resume (dict from parse_resume_data)
   <div class="resume-header">
     <h1 class="resume-name">{{ resume.personal.name }}</h1>
     <div class="resume-contact">
-      {% if resume.personal.phone %}<span>{{ resume.personal.phone }}</span>{% endif %}
-      {% if resume.personal.email %}<span>{{ resume.personal.email }}</span>{% endif %}
-      {% if resume.personal.location %}<span>{{ resume.personal.location }}</span>{% endif %}
-      {% if resume.personal.linkedin %}<span><a href="{{ resume.personal.linkedin }}">{{ resume.personal.linkedin }}</a></span>{% endif %}
+      {% if resume.personal.phone %}
+      <span class="contact-item">{{ phone_icon|safe }} {{ resume.personal.phone }}</span>
+      {% endif %}
+      {% if resume.personal.email %}
+      <span class="contact-item">{{ email_icon|safe }} {{ resume.personal.email }}</span>
+      {% endif %}
+      {% if resume.personal.location %}
+      <span class="contact-item">{{ location_icon|safe }} {{ resume.personal.location }}</span>
+      {% endif %}
+      {% if resume.personal.linkedin %}
+      <span class="contact-item">{{ linkedin_icon|safe }} <a href="{{ resume.personal.linkedin }}">{{ resume.personal.linkedin }}</a></span>
+      {% endif %}
+      {% if resume.personal.github %}
+      <span class="contact-item">{{ github_icon|safe }} <a href="{{ resume.personal.github }}">{{ resume.personal.github }}</a></span>
+      {% endif %}
     </div>
   </div>
 
@@ -21,6 +39,25 @@ Context variable: resume (dict from parse_resume_data)
   <div class="resume-section">
     <div class="section-title">Professional Summary</div>
     <p class="summary-text">{{ resume.summary }}</p>
+  </div>
+  {% endif %}
+
+  <!-- ===== SKILLS ===== -->
+  {% if resume.skills.primary or resume.skills.secondary %}
+  <div class="resume-section">
+    <div class="section-title">Skills</div>
+    {% if resume.skills.primary %}
+    <div class="skills-row">
+      <span class="skills-label">Primary</span>
+      <span class="skills-list">{{ resume.skills.primary }}</span>
+    </div>
+    {% endif %}
+    {% if resume.skills.secondary %}
+    <div class="skills-row">
+      <span class="skills-label">Secondary</span>
+      <span class="skills-list">{{ resume.skills.secondary }}</span>
+    </div>
+    {% endif %}
   </div>
   {% endif %}
 
@@ -38,7 +75,12 @@ Context variable: resume (dict from parse_resume_data)
           {% if exp.is_present %}Present{% else %}{% if exp.end_month %}{{ exp.end_month }}/{% endif %}{{ exp.end_year }}{% endif %}
         </span>
       </div>
-      {% if exp.location %}<div class="exp-location">{{ exp.location }}</div>{% endif %}
+      {% if exp.designation or exp.location %}
+      <div class="exp-subheader">
+        <span class="exp-designation">{{ exp.designation }}</span>
+        {% if exp.location %}<span class="exp-location">{{ exp.location }}</span>{% endif %}
+      </div>
+      {% endif %}
       {% if exp.bullets %}
       <ul class="bullet-list">
         {% for bullet in exp.bullets %}<li>{{ bullet }}</li>{% endfor %}
@@ -102,3 +144,4 @@ Context variable: resume (dict from parse_resume_data)
   {% endif %}
 
 </div>
+{% endwith %}{% endwith %}{% endwith %}{% endwith %}{% endwith %}{% endwith %}

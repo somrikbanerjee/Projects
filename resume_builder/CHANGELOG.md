@@ -4,6 +4,26 @@ All notable changes to this project are documented here.
 
 ---
 
+## [0.3.1] — 2026-05-23
+
+### Added
+- **Contact icons in resume header** — small inline SVG icons appear before each contact field (phone, email, location, LinkedIn, GitHub). Icons use `fill="currentColor"` and scale with the surrounding text via `em` sizing.
+- **GitHub profile field** — added to Personal Details in the form and rendered in the resume header with a GitHub icon. Stored in the `.resume` save file under `personal.github`.
+- **Job Title / Designation field for Work Experience** — each experience entry now has a Designation input. On the resume it renders on the line below the company name, left-aligned with the work location right-aligned beside it (`exp-subheader` row). Stored in the `.resume` save file and restored on load.
+- **Skills section** — new form section (placed between Professional Summary and Work Experience) with two plain-text comma-separated inputs: Primary Skills and Secondary Skills. Renders on the resume as a two-row labelled block under a Skills heading. Included in PDF scaling and `.resume` save/load.
+
+### Changed
+- Personal Details form reorganised: Base Location moved up to share a row with Primary Email; LinkedIn and GitHub now share the row below.
+- Experience form entry reorganised: Row 1 is now Company Name | Job Title / Designation; Work Location moved to its own full-width row beneath.
+
+### Files changed
+- `builder/views.py` — `parse_resume_data` updated with `designation` in `exp_fields`, `github` in personal dict, `skills` dict added; `save_resume` persists `skills`.
+- `builder/templates/builder/resume_content.html` — inline SVG icons added to all contact fields; `github` contact item added; `exp-subheader` block with designation and location; Skills section added between Summary and Experience.
+- `builder/templates/builder/resume_pdf.html` — CSS added for `.contact-icon`, `.contact-item`, `.exp-subheader`, `.exp-designation`, `.skills-row`, `.skills-label`, `.skills-list`.
+- `builder/templates/builder/index.html` — GitHub input added to Personal Details; Skills section card added; experience `addEntry` updated with Designation field and reorganised rows; `populateForm` updated for `github`, `designation`, `skills_primary`, `skills_secondary`; matching CSS added to preview resume styles.
+
+---
+
 ## [0.3.0] — 2026-05-23
 
 ### Added
