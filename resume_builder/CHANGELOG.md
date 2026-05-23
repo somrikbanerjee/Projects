@@ -4,6 +4,21 @@ All notable changes to this project are documented here.
 
 ---
 
+## [0.3.2] — 2026-05-23
+
+### Fixed
+- **500 Internal Server Error on preview** — `resume_content.html` had 5 `{% with %}` blocks but 6 `{% endwith %}` tags, causing a `TemplateSyntaxError` on every preview request. Removed the extra `{% endwith %}`.
+- **Fragile SVG macro approach replaced** — the `{% with var='<svg ...>' %}` macro technique for icon variables was removed entirely. Each contact icon is now inlined directly at its point of use, eliminating the tag-mismatch class of bug permanently.
+- **Skills section guard for old save files** — wrapped the Skills section in an additional `{% if resume.skills %}` check so that resumes loaded from pre-0.3.1 `.resume` files (which have no `skills` key in their JSON) render cleanly without error rather than hitting a `NoneType` attribute access.
+
+### Notes
+- Resumes saved with v0.3.0 or earlier load and preview correctly; Skills, GitHub, and Designation fields simply remain blank since they were not present in older save files.
+
+### Files changed
+- `builder/templates/builder/resume_content.html` — removed `{% with %}` icon macro block and trailing `{% endwith %}` tags; SVG icons inlined per contact field; added `{% if resume.skills %}` outer guard around Skills section.
+
+---
+
 ## [0.3.1] — 2026-05-23
 
 ### Added
