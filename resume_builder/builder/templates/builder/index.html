@@ -4,6 +4,9 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Resume Builder</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Merriweather:wght@700&family=Lato:wght@400;600;700&display=swap" rel="stylesheet" />
   <style>
     :root {
       --primary: #1e3a5f;
@@ -135,19 +138,19 @@
     .resume {
       width: min(8.5in, 100%);
       background: white;
-      padding: .75in .75in .75in .75in;
-      font-family: Arial, Helvetica, sans-serif;
+      padding: .75in;
+      font-family: 'Calibri', 'Lato', 'Liberation Sans', Arial, sans-serif;
       font-size: 10.5pt;
       color: #000;
       line-height: 1.45;
       box-shadow: 0 6px 30px rgba(0,0,0,.18);
     }
     .resume-header { text-align: center; margin-bottom: 12px; border-bottom: 2px solid #1e3a5f; padding-bottom: 8px; }
-    .resume-name { font-size: 22pt; font-weight: 700; letter-spacing: .5px; text-transform: uppercase; }
+    .resume-name { font-family: 'Merriweather', Georgia, 'Times New Roman', serif; font-size: 22pt; font-weight: 700; letter-spacing: .5px; text-transform: uppercase; }
     .resume-contact { margin-top: 4px; font-size: 9.5pt; color: #333; display: flex; flex-wrap: wrap; justify-content: center; gap: 3px 14px; }
     .resume-contact a { color: #2d6a9f; text-decoration: none; }
     .resume-section { margin-bottom: 12px; }
-    .section-title { font-size: 11pt; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: #1e3a5f; border-bottom: 1.5px solid #1e3a5f; padding-bottom: 2px; margin-bottom: 6px; }
+    .section-title { font-family: 'Merriweather', Georgia, 'Times New Roman', serif; font-size: 11pt; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: #1e3a5f; border-bottom: 1.5px solid #1e3a5f; padding-bottom: 2px; margin-bottom: 6px; }
     .summary-text { font-size: 10pt; line-height: 1.55; }
     .exp-entry, .edu-entry, .cert-entry, .proj-entry { margin-bottom: 9px; }
     .exp-header, .edu-header, .proj-header { display: flex; justify-content: space-between; align-items: baseline; }
@@ -160,6 +163,13 @@
     .proj-tech { font-size: 9.5pt; color: #2d6a9f; font-style: italic; }
     .bullet-list { margin: 3px 0 0 16px; padding: 0; }
     .bullet-list li { font-size: 10pt; margin-bottom: 2px; line-height: 1.45; }
+
+    /* ---- Scale notice (shown when preview is shrunk to fit one page) ---- */
+    .scale-notice {
+      background: #fffbeb; color: #92400e; border: 1px solid #fbbf24;
+      border-radius: 6px; padding: .45rem .85rem; font-size: .78rem; font-weight: 500;
+      margin-bottom: .75rem; width: min(8.5in, 100%); text-align: center;
+    }
 
     /* ======== MODAL ======== */
     .modal-overlay {
@@ -469,8 +479,41 @@ async function loadPreview() {
     const res = await fetch('{% url "preview" %}', { method: 'POST', body: fd });
     if (!res.ok) throw new Error(`Server error ${res.status}`);
     content.innerHTML = await res.text();
+    // Wait two animation frames so the browser has fully laid out the new content.
+    await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+    fitToPage(content);
   } catch (err) {
     content.innerHTML = `<div class="preview-error">&#9888; Failed to load preview: ${err.message}</div>`;
+  }
+}
+
+// Scale the .resume element down (CSS transform) so it always fits one page.
+function fitToPage(container) {
+  const el = container.querySelector('.resume');
+  if (!el) return;
+
+  // Reset any previous scaling
+  el.style.transform = '';
+  el.style.transformOrigin = '';
+  el.style.marginBottom = '';
+  container.querySelector('.scale-notice')?.remove();
+
+  const PAGE_H = 11 * 96; // 1056 px — letter page height at CSS 96 dpi
+  const h = el.offsetHeight;
+
+  if (h > PAGE_H) {
+    const scale = PAGE_H / h;
+    el.style.transform = `scale(${scale})`;
+    el.style.transformOrigin = 'top center';
+    // CSS transforms don't affect layout flow, so collapse the now-empty space below.
+    el.style.marginBottom = `-${Math.ceil(h * (1 - scale))}px`;
+
+    const notice = document.createElement('div');
+    notice.className = 'scale-notice';
+    notice.textContent =
+      `Preview scaled to ${Math.round(scale * 100)}% to fit one page. ` +
+      `The exported PDF will automatically reduce font size to match.`;
+    container.insertBefore(notice, el);
   }
 }
 

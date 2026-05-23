@@ -4,6 +4,25 @@ All notable changes to this project are documented here.
 
 ---
 
+## [0.3.0] — 2026-05-23
+
+### Added
+- **Auto-fit to one page (PDF)** — `download_pdf` now renders the resume at the default 10.5pt base font size and, if the output exceeds one page, performs a binary search (up to 7 iterations, ~0.05pt precision) between 7pt and 10.5pt to find the largest font size that keeps all content on a single letter-size page. All measurements and spacing use `em` units in the PDF template so the entire layout — name, section headings, body text, bullets, and inter-section spacing — scales proportionally with the base font size.
+- **Auto-fit to one page (preview)** — After the AJAX preview is injected, `fitToPage()` waits for the browser to finish layout (double `requestAnimationFrame`), measures `offsetHeight` against a 1056px target (11 in × 96 dpi), and applies a CSS `transform: scale()` with a compensating negative `marginBottom` to collapse empty space. A yellow banner appears below the toolbar when scaling is active, showing the percentage and noting that the PDF will auto-adjust to match.
+- **Merriweather for header text** — Resume name and section titles now use the Merriweather serif font (loaded via Google Fonts in both the browser preview and WeasyPrint PDF render).
+- **Calibri / Lato for body text** — Body text uses `Calibri` where available (Windows / macOS), with `Lato` (Google Fonts) as a cross-platform fallback, followed by `Liberation Sans` and `Arial`.
+
+### Changed
+- `resume_pdf.html` CSS rewritten to use `em` units throughout so all sizes and spacing scale proportionally when `base_font_size` changes. Previously used absolute `pt` values.
+- `download_pdf` view refactored from a single `write_pdf()` call to a two-phase render/binary-search flow using WeasyPrint's `HTML.render()` and `Document.write_pdf()`.
+
+### Files changed
+- `builder/views.py` — `download_pdf` replaced with binary-search font-fitting logic.
+- `builder/templates/builder/resume_pdf.html` — CSS converted to `em`-based sizing; `{{ base_font_size }}` template variable added; Merriweather and Calibri/Lato font stacks applied.
+- `builder/templates/builder/index.html` — Google Fonts `<link>` tags added; preview resume CSS updated with Merriweather and Calibri/Lato stacks; `fitToPage()` function added; `loadPreview()` updated to call `fitToPage()` after layout settles; `.scale-notice` CSS added.
+
+---
+
 ## [0.2.1] — 2026-05-23
 
 ### Changed

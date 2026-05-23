@@ -109,8 +109,31 @@ def save_resume(request):
 @require_http_methods(["POST"])
 def download_pdf(request):
     data = parse_resume_data(request.POST)
-    html_string = render(request, "builder/resume_pdf.html", {"resume": data}).content.decode("utf-8")
-    pdf = weasyprint.HTML(string=html_string, base_url=request.build_absolute_uri("/")).write_pdf()
+    base_url = request.build_absolute_uri("/")
+
+    def make_doc(font_size):
+        html = render(request, "builder/resume_pdf.html", {
+            "resume": data,
+            "base_font_size": f"{font_size:.2f}",
+        }).content.decode("utf-8")
+        return weasyprint.HTML(string=html, base_url=base_url).render()
+
+    # Start at the default size; binary-search down if content overflows one page.
+    doc = make_doc(10.5)
+    if len(doc.pages) > 1:
+        lo, hi = 7.0, 10.5
+        for _ in range(7):          # 7 steps → ≤0.05 pt precision
+            mid = (lo + hi) / 2
+            candidate = make_doc(mid)
+            if len(candidate.pages) <= 1:
+                doc = candidate
+                lo = mid            # fits — try larger
+            else:
+                hi = mid            # overflows — try smaller
+            if hi - lo < 0.08:
+                break
+
+    pdf = doc.write_pdf()
     name = data["personal"]["name"] or "resume"
     filename = f"{name.replace(' ', '_')}_Resume.pdf"
     response = HttpResponse(pdf, content_type="application/pdf")

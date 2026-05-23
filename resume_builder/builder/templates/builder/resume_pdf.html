@@ -3,57 +3,70 @@
 <head>
   <meta charset="UTF-8" />
   <style>
+    /* Google Fonts — fetched by WeasyPrint at render time */
+    @import url('https://fonts.googleapis.com/css2?family=Merriweather:wght@700&family=Lato:wght@400;600;700&display=swap');
+
     @page {
       size: letter;
       margin: 0.75in;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    /*
+      base_font_size is set by the view via binary search so everything
+      fits on one page. All sizes below use em so they scale in proportion.
+      Default 10.5pt; falls to 7pt minimum.
+    */
     body {
-      font-family: Arial, Helvetica, sans-serif;
-      font-size: 10.5pt;
+      font-family: 'Calibri', 'Lato', 'Liberation Sans', Arial, sans-serif;
+      font-size: {{ base_font_size|default:"10.5" }}pt;
       color: #000;
       line-height: 1.45;
     }
 
+    /* ---- Header ---- */
     .resume-header {
       text-align: center;
-      margin-bottom: 10px;
+      margin-bottom: 0.85em;
       border-bottom: 2px solid #1e3a5f;
-      padding-bottom: 8px;
+      padding-bottom: 0.57em;
     }
     .resume-name {
-      font-size: 22pt;
+      font-family: 'Merriweather', Georgia, 'Times New Roman', serif;
+      font-size: 2.1em;
       font-weight: 700;
       letter-spacing: 0.5px;
       text-transform: uppercase;
     }
     .resume-contact {
-      margin-top: 4px;
-      font-size: 9.5pt;
+      margin-top: 0.35em;
+      font-size: 0.9em;
       color: #333;
       display: flex;
       flex-wrap: wrap;
       justify-content: center;
-      gap: 3px 14px;
+      gap: 0.21em 1.0em;
     }
     .resume-contact a { color: #2d6a9f; text-decoration: none; }
 
-    .resume-section { margin-bottom: 12px; }
+    /* ---- Sections ---- */
+    .resume-section { margin-bottom: 0.85em; }
     .section-title {
-      font-size: 11pt;
+      font-family: 'Merriweather', Georgia, 'Times New Roman', serif;
+      font-size: 1.05em;
       font-weight: 700;
       text-transform: uppercase;
       letter-spacing: 1px;
       color: #1e3a5f;
       border-bottom: 1.5px solid #1e3a5f;
-      padding-bottom: 2px;
-      margin-bottom: 6px;
+      padding-bottom: 0.15em;
+      margin-bottom: 0.43em;
     }
 
-    .summary-text { font-size: 10pt; line-height: 1.55; }
+    .summary-text { font-size: 0.95em; line-height: 1.55; }
 
     .exp-entry, .edu-entry, .cert-entry, .proj-entry {
-      margin-bottom: 9px;
+      margin-bottom: 0.64em;
       page-break-inside: avoid;
     }
     .exp-header, .edu-header, .proj-header {
@@ -61,16 +74,17 @@
       justify-content: space-between;
       align-items: baseline;
     }
-    .company-name, .institution-name, .proj-name { font-weight: 700; font-size: 10.5pt; }
-    .date-range { font-size: 9.5pt; color: #555; white-space: nowrap; }
-    .exp-location { font-size: 9.5pt; color: #555; font-style: italic; margin-bottom: 2px; }
-    .edu-degree { font-size: 10pt; margin-top: 1px; }
-    .cert-name { font-weight: 600; }
-    .cert-issuer, .cert-date { color: #555; }
-    .cert-date { font-size: 9.5pt; }
-    .proj-tech { font-size: 9.5pt; color: #2d6a9f; font-style: italic; }
-    .bullet-list { margin: 3px 0 0 16px; padding: 0; }
-    .bullet-list li { font-size: 10pt; margin-bottom: 2px; line-height: 1.45; }
+    .company-name, .institution-name, .proj-name { font-weight: 700; font-size: 1em; }
+    .date-range  { font-size: 0.9em; color: #555; white-space: nowrap; }
+    .exp-location { font-size: 0.9em; color: #555; font-style: italic; margin-bottom: 0.15em; }
+    .edu-degree  { font-size: 0.95em; margin-top: 0.1em; }
+    .cert-entry  { font-size: 0.95em; }
+    .cert-name   { font-weight: 600; }
+    .cert-issuer { color: #555; }
+    .cert-date   { color: #555; font-size: 0.9em; }
+    .proj-tech   { font-size: 0.9em; color: #2d6a9f; font-style: italic; }
+    .bullet-list { margin: 0.2em 0 0 1.15em; padding: 0; }
+    .bullet-list li { font-size: 0.95em; margin-bottom: 0.15em; line-height: 1.45; }
   </style>
 </head>
 <body>
