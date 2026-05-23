@@ -117,27 +117,47 @@ def download_pdf(request):
     data = parse_resume_data(request.POST)
     base_url = request.build_absolute_uri("/")
 
-    def make_doc(font_size):
+    def make_doc(font_size, margin="0.75in"):
         html = render(request, "builder/resume_pdf.html", {
             "resume": data,
             "base_font_size": f"{font_size:.2f}",
+            "page_margin": margin,
         }).content.decode("utf-8")
         return weasyprint.HTML(string=html, base_url=base_url).render()
 
-    # Start at the default size; binary-search down if content overflows one page.
-    doc = make_doc(10.5)
-    if len(doc.pages) > 1:
-        lo, hi = 7.0, 10.5
-        for _ in range(7):          # 7 steps → ≤0.05 pt precision
+    def binary_search_font(margin, lo, hi):
+        """Return the best-fitting doc at the given margin within [lo, hi] pt."""
+        doc = make_doc(hi, margin)
+        if len(doc.pages) <= 1:
+            return doc
+        for _ in range(7):
             mid = (lo + hi) / 2
-            candidate = make_doc(mid)
+            candidate = make_doc(mid, margin)
             if len(candidate.pages) <= 1:
                 doc = candidate
-                lo = mid            # fits — try larger
+                lo = mid
             else:
-                hi = mid            # overflows — try smaller
+                hi = mid
             if hi - lo < 0.08:
                 break
+        return doc
+
+    # Phase 1 — default margins (0.75 in), font 8.5–10.5 pt
+    doc = binary_search_font("0.75in", 8.5, 10.5)
+
+    # Phase 2 — tighter margins (0.6 in), font 8.5–10.5 pt
+    if len(doc.pages) > 1:
+        doc = binary_search_font("0.60in", 8.5, 10.5)
+
+    # Phase 3 — minimum margins (0.5 in), font 8.5–10.5 pt
+    if len(doc.pages) > 1:
+        doc = binary_search_font("0.50in", 8.5, 10.5)
+
+    # Phase 4 — still overflows: accept up to 2 pages at 8.5 pt / 0.5 in.
+    # Experience has page-break-inside: avoid so it stays together on page 1;
+    # Education, Certifications, Projects flow naturally to page 2.
+    if len(doc.pages) > 2:
+        doc = make_doc(8.5, "0.50in")
 
     pdf = doc.write_pdf()
     name = data["personal"]["name"] or "resume"

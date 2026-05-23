@@ -8,7 +8,7 @@
 
     @page {
       size: letter;
-      margin: 0.75in;
+      margin: {{ page_margin|default:"0.75in" }};
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -42,12 +42,10 @@
       margin-top: 0.35em;
       font-size: 0.9em;
       color: #333;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 0.2em;
+      text-align: center;
     }
-    .contact-row { display: flex; flex-wrap: wrap; justify-content: center; gap: 0 1.0em; }
+    /* Each row is a block; items inside flow as inline boxes */
+    .contact-row { margin-bottom: 0.15em; }
     .resume-contact a { color: #2d6a9f; text-decoration: none; }
 
     /* ---- Sections ---- */
@@ -89,8 +87,13 @@
     .bullet-list { margin: 0.2em 0 0 1.15em; padding: 0; }
     .bullet-list li { font-size: 0.95em; margin-bottom: 0.15em; line-height: 1.45; }
 
+    /* Experience section must not be split across pages */
+    .exp-section { page-break-inside: avoid; }
+    /* Later sections may start on a new page if needed */
+    .edu-section, .cert-section, .proj-section { page-break-before: auto; }
+
     /* ---- Contact icons ---- */
-    .contact-item { display: inline-flex; align-items: center; gap: 0.22em; white-space: nowrap; }
+    .contact-item { display: inline-flex; align-items: center; gap: 0.22em; white-space: nowrap; margin: 0 0.45em; }
     .contact-icon { width: 0.9em; height: 0.9em; flex-shrink: 0; vertical-align: middle; }
 
     /* ---- Experience sub-header (designation | location) ---- */

@@ -4,6 +4,31 @@ All notable changes to this project are documented here.
 
 ---
 
+## [0.3.5] — 2026-05-23
+
+### Added
+- **Dynamic margin adjustment** — PDF export now tries three margin levels before reducing font size: 0.75 in (default) → 0.60 in → 0.50 in. Font size is binary-searched in the range 8.5–10.5 pt at each margin level, so font never drops below 8.5 pt before margins are tightened.
+- **Two-page fallback** — if content cannot fit on one page even at 8.5 pt / 0.5 in margins, the export accepts up to two pages rather than forcing an unreadably small font. A hard cap of two pages is enforced; anything beyond two pages is rendered at 8.5 pt / 0.5 in and left to flow naturally.
+- **Experience section kept on page 1** — the Work Experience section is marked with `page-break-inside: avoid` (class `exp-section`) so WeasyPrint will not split it across pages. Education, Certifications, and Projects sections (`edu-section`, `cert-section`, `proj-section`) carry `page-break-before: auto`, allowing them to flow freely to page 2 when needed.
+
+### Files changed
+- `builder/views.py` — `download_pdf` refactored into a three-phase margin-then-font strategy with `binary_search_font` helper; `make_doc` now accepts a `margin` parameter passed to the template.
+- `builder/templates/builder/resume_pdf.html` — `@page margin` now uses `{{ page_margin }}` template variable (defaults to `0.75in`); `.exp-section`, `.edu-section`, `.cert-section`, `.proj-section` page-break rules added.
+- `builder/templates/builder/resume_content.html` — section `div` elements given semantic classes: `exp-section`, `edu-section`, `cert-section`, `proj-section`.
+
+---
+
+## [0.3.4.1] — 2026-05-23
+
+### Fixed
+- **Contact header layout still broken in PDF** — even with `white-space: nowrap`, WeasyPrint was stacking each `.contact-item` on its own line because `display: flex` on `.contact-row` causes WeasyPrint to treat `inline-flex` children as block-level flex items (each taking full row width). Replaced flex layout on `.contact-row` with plain block layout and `text-align: center` on `.resume-contact`, so `.contact-item` elements render as true inline boxes that flow left-to-right and wrap as whole units — exactly how browsers render it. Added `margin: 0 0.45em` to `.contact-item` to restore horizontal spacing previously provided by flex `gap`.
+
+### Files changed
+- `builder/templates/builder/resume_pdf.html` — `.resume-contact` changed from flex-column to `text-align: center`; `.contact-row` changed from `display: flex` to plain block with `margin-bottom`; `.contact-item` given `margin: 0 0.45em`.
+- `builder/templates/builder/index.html` — matching preview CSS updated for consistency.
+
+---
+
 ## [0.3.4] — 2026-05-23
 
 ### Fixed
