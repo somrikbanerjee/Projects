@@ -117,47 +117,59 @@ def download_pdf(request):
     data = parse_resume_data(request.POST)
     base_url = request.build_absolute_uri("/")
 
-    def make_doc(font_size, margin="0.75in"):
+    def make_doc(font_size, margin="0.75in", force_page_break=False, page2_font="10.5"):
         html = render(request, "builder/resume_pdf.html", {
             "resume": data,
             "base_font_size": f"{font_size:.2f}",
             "page_margin": margin,
+            "force_page_break": force_page_break,
+            "page2_font_size": page2_font,
         }).content.decode("utf-8")
         return weasyprint.HTML(string=html, base_url=base_url).render()
 
-    def binary_search_font(margin, lo, hi):
-        """Return the best-fitting doc at the given margin within [lo, hi] pt."""
-        doc = make_doc(hi, margin)
-        if len(doc.pages) <= 1:
+    def best_fit(margin, lo, hi, force_page_break=False, max_pages=1):
+        """Largest font in [lo, hi] where page count <= max_pages."""
+        doc = make_doc(hi, margin, force_page_break)
+        if len(doc.pages) <= max_pages:
             return doc
+        best = None
         for _ in range(7):
             mid = (lo + hi) / 2
-            candidate = make_doc(mid, margin)
-            if len(candidate.pages) <= 1:
-                doc = candidate
+            candidate = make_doc(mid, margin, force_page_break)
+            if len(candidate.pages) <= max_pages:
+                best = candidate
                 lo = mid
             else:
                 hi = mid
             if hi - lo < 0.08:
                 break
-        return doc
+        return best or make_doc(lo, margin, force_page_break)
 
-    # Phase 1 — default margins (0.75 in), font 8.5–10.5 pt
-    doc = binary_search_font("0.75in", 8.0, 10.5)
-
-    # Phase 2 — tighter margins (0.6 in), font 8.0–10.5 pt
+    # ── Phases 1–3: shrink to fit everything on one page ───────────────────
+    doc = best_fit("0.75in", 8.0, 10.5)
     if len(doc.pages) > 1:
-        doc = binary_search_font("0.60in", 8.0, 10.5)
-
-    # Phase 3 — minimum margins (0.5 in), font 8.0–10.5 pt
+        doc = best_fit("0.60in", 8.0, 10.5)
     if len(doc.pages) > 1:
-        doc = binary_search_font("0.50in", 8.0, 10.5)
+        doc = best_fit("0.50in", 8.0, 10.5)
 
-    # Phase 4 — still overflows: accept up to 2 pages at 8.0 pt / 0.5 in.
-    # Individual exp-entry elements have page-break-inside: avoid so entries
-    # stay together; Education, Certifications, Projects flow to page 2.
-    if len(doc.pages) > 2:
-        doc = make_doc(8.0, "0.50in")
+    # ── Phase 4: deliberate two-page layout ────────────────────────────────
+    # Content truly needs two pages.  Strategy:
+    #   Page 1 — header + summary + skills + experience, font EXPANDED to fill
+    #            the page (binary search upward from 8pt to 12pt).
+    #   Page 2 — education + certifications + projects at the standard 10.5pt
+    #            base so the second page never looks cramped or outsized.
+    if len(doc.pages) > 1:
+        has_p2 = any([data["educations"], data["certifications"], data["projects"]])
+        if has_p2:
+            # Find the largest font where exp-section (with forced break) still
+            # fits on page 1, i.e. total pages <= 2.
+            doc = best_fit("0.75in", 8.0, 12.0, force_page_break=True, max_pages=2)
+            # If experience itself is enormous and still overflows at 8pt, fall
+            # back: accept however many pages it produces at 8pt.
+            if len(doc.pages) > 2:
+                doc = make_doc(8.0, "0.75in", force_page_break=True)
+        else:
+            doc = make_doc(8.0, "0.50in")
 
     pdf = doc.write_pdf()
     name = data["personal"]["name"] or "resume"

@@ -87,9 +87,19 @@
     .bullet-list { margin: 0.2em 0 0 1.15em; padding: 0; }
     .bullet-list li { font-size: 0.95em; margin-bottom: 0.15em; line-height: 1.45; }
 
-    /* Individual entries won't split; section-level avoidance removed so the
-       section doesn't get shunted wholesale to page 2 when page 1 is tight. */
+    /* Individual entries won't split. */
     .edu-section, .cert-section, .proj-section { page-break-before: auto; }
+
+    /* ---- Two-page layout (injected only when force_page_break is True) ---- */
+    {% if force_page_break %}
+    /* Force page 1 → page 2 split after Work Experience */
+    .exp-section { page-break-after: always; }
+    /* Page 2 sections always render at the standard 10.5 pt base so they
+       don't inherit the expanded page-1 font and never look too small. */
+    .edu-section, .cert-section, .proj-section {
+      font-size: {{ page2_font_size|default:"10.5" }}pt;
+    }
+    {% endif %}
 
     /* ---- Contact icons ---- */
     /* inline-block is the only reliable WeasyPrint layout for same-line flow */

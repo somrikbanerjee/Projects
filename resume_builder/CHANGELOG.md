@@ -4,6 +4,28 @@ All notable changes to this project are documented here.
 
 ---
 
+## [0.3.8] — 2026-05-23
+
+### Changed
+- **Two-page layout strategy reworked** — when content cannot fit on one page, the export now uses a deliberate two-page split rather than continuing to shrink fonts:
+  - **Page 1** (header + summary + skills + work experience) uses the *largest* font in the range 8–12 pt at which all experience entries still fit on page 1. The binary search maximises the font rather than minimising it, so page 1 fills the available space at normal or near-normal text sizes instead of being crammed at 8 pt.
+  - **Page 2** (education + certifications + projects) always renders at the standard 10.5 pt base, regardless of the page 1 font, so the second page never looks disproportionately small or large.
+  - A CSS `page-break-after: always` is applied to `.exp-section` to enforce the split. The page 2 font override is injected via a `{% if force_page_break %}` CSS block in the template, active only in two-page mode.
+  - If experience itself is so long that it cannot fit on page 1 even at 8 pt, the layout falls back gracefully: the forced split is still applied and the page count is accepted.
+
+### Testing
+- Verified with an overflow dataset (original 6 experience entries + 4 certifications + 2 projects + 3 education entries) that spills past one page:
+  - Page 1: SOMRIK BANERJEE header (two-row contact) · Professional Summary · Skills · Work Experience (all 6 entries).
+  - Page 2: Education · Certifications · Projects — at standard 10.5 pt.
+  - Phase 4 selected font: ~10.31 pt for page 1 (largest that kept all experience on page 1).
+- Verified original single-page resume still produces exactly 1 page unchanged.
+
+### Files changed
+- `builder/views.py` — `download_pdf` refactored: `make_doc` and `best_fit` accept `force_page_break` and `page2_font` parameters; Phase 4 replaced with the fill-and-split strategy.
+- `builder/templates/builder/resume_pdf.html` — `{% if force_page_break %}` CSS block added: `.exp-section { page-break-after: always }` and `.edu-section, .cert-section, .proj-section { font-size: {{ page2_font_size }}pt }`.
+
+---
+
 ## [0.3.7] — 2026-05-23
 
 ### Added
