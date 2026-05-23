@@ -21,7 +21,7 @@ A locally-hosted Django web application that lets you build, preview, save, and 
 Switch between the **Edit** tab (the form) and the **Preview** tab at any time. The Preview tab renders a live, accurate representation of the final resume using the same HTML/CSS as the PDF export. If the content exceeds one page, the preview is scaled down visually.
 
 ### Auto-fit to one page
-When exporting to PDF, the server automatically binary-searches for the largest font size (between 7 pt and 10.5 pt) that keeps all content on a single letter-size page. All font sizes, spacing, and margins scale proportionally because the PDF template uses `em` units throughout.
+When exporting to PDF, the server tries to keep all content on a single letter-size page using a three-phase strategy: binary-search over font size (8–10.5 pt) at default margins (0.75 in), then at 0.6 in, then at 0.5 in. If the content still overflows, a two-page layout is accepted — Work Experience stays on page 1 and Education / Certifications / Projects flow to page 2. All sizes and spacing use `em` units so everything scales proportionally.
 
 ### Save & Load (`.resume` files)
 - **Save** — click the **Save** button in the top bar to open a dialog where you choose a directory and filename. The resume is written to disk as a structured JSON file with the `.resume` extension.
@@ -30,6 +30,13 @@ When exporting to PDF, the server automatically binary-searches for the largest 
 
 ### Export PDF
 While on the **Preview** tab, click **Export PDF** to download an ATS-friendly PDF. The file is named `FirstName_LastName_Resume.pdf` automatically.
+
+### Keyboard shortcuts
+| Shortcut | Action |
+|---|---|
+| `Ctrl+S` / `Cmd+S` | Open the Save dialog |
+| `Ctrl+O` / `Cmd+O` | Open the file picker to load a `.resume` file |
+| `Ctrl+E` / `Cmd+E` | Export and download the PDF |
 
 ### Typography
 - **Headers** (resume name, section titles): Merriweather serif, loaded via Google Fonts

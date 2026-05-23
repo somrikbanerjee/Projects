@@ -12,7 +12,10 @@
       "Bash(pkill -f \"manage.py runserver\")",
       "Bash(python3 -m py_compile builder/views.py)",
       "Bash(python3 -c ' *)",
-      "Bash(grep -v \"^$\")"
+      "Bash(grep -v \"^$\")",
+      "Bash(pdftotext -layout -f 1 -l 1 /tmp/iter1.pdf -)",
+      "Bash(pdftotext -layout /tmp/iter1.pdf -)",
+      "Bash(pdfinfo /tmp/iter1.pdf)"
     ]
   }
 }

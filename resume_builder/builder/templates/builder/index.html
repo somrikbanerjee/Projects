@@ -168,8 +168,8 @@
     .bullet-list li { font-size: 10pt; margin-bottom: 2px; line-height: 1.45; }
 
     /* ---- Contact icons ---- */
-    .contact-item { display: inline-flex; align-items: center; gap: 0.22em; white-space: nowrap; margin: 0 7px; }
-    .contact-icon { width: 0.9em; height: 0.9em; flex-shrink: 0; vertical-align: middle; }
+    .contact-item { display: inline-block; white-space: nowrap; vertical-align: middle; margin: 0 6px; }
+    .contact-icon { display: inline-block; width: 0.9em; height: 0.9em; vertical-align: middle; margin-right: 4px; }
 
     /* ---- Experience sub-header (designation | location) ---- */
     .exp-subheader { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 2px; }
@@ -737,6 +737,25 @@ function showToast(msg, type='info') {
 // ─── Close modal on overlay click ────────────────────────────────────────
 document.getElementById('save-modal').addEventListener('click', e => {
   if (e.target === e.currentTarget) closeSaveModal();
+});
+
+// ─── Keyboard shortcuts ──────────────────────────────────────────────────
+document.addEventListener('keydown', e => {
+  if (!(e.ctrlKey || e.metaKey)) return;
+  switch (e.key.toLowerCase()) {
+    case 's':
+      e.preventDefault();
+      openSaveModal();
+      break;
+    case 'o':
+      e.preventDefault();
+      triggerLoad();
+      break;
+    case 'e':
+      e.preventDefault();
+      exportPDF();
+      break;
+  }
 });
 
 // ─── Init ────────────────────────────────────────────────────────────────

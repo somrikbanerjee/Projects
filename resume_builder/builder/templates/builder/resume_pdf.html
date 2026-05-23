@@ -87,14 +87,14 @@
     .bullet-list { margin: 0.2em 0 0 1.15em; padding: 0; }
     .bullet-list li { font-size: 0.95em; margin-bottom: 0.15em; line-height: 1.45; }
 
-    /* Experience section must not be split across pages */
-    .exp-section { page-break-inside: avoid; }
-    /* Later sections may start on a new page if needed */
+    /* Individual entries won't split; section-level avoidance removed so the
+       section doesn't get shunted wholesale to page 2 when page 1 is tight. */
     .edu-section, .cert-section, .proj-section { page-break-before: auto; }
 
     /* ---- Contact icons ---- */
-    .contact-item { display: inline-flex; align-items: center; gap: 0.22em; white-space: nowrap; margin: 0 0.45em; }
-    .contact-icon { width: 0.9em; height: 0.9em; flex-shrink: 0; vertical-align: middle; }
+    /* inline-block is the only reliable WeasyPrint layout for same-line flow */
+    .contact-item { display: inline-block; white-space: nowrap; vertical-align: middle; margin: 0 0.4em; }
+    .contact-icon { display: inline-block; width: 0.9em; height: 0.9em; vertical-align: middle; margin-right: 0.18em; }
 
     /* ---- Experience sub-header (designation | location) ---- */
     .exp-subheader { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 0.2em; }

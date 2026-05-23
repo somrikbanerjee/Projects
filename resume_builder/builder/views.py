@@ -143,21 +143,21 @@ def download_pdf(request):
         return doc
 
     # Phase 1 — default margins (0.75 in), font 8.5–10.5 pt
-    doc = binary_search_font("0.75in", 8.5, 10.5)
+    doc = binary_search_font("0.75in", 8.0, 10.5)
 
-    # Phase 2 — tighter margins (0.6 in), font 8.5–10.5 pt
+    # Phase 2 — tighter margins (0.6 in), font 8.0–10.5 pt
     if len(doc.pages) > 1:
-        doc = binary_search_font("0.60in", 8.5, 10.5)
+        doc = binary_search_font("0.60in", 8.0, 10.5)
 
-    # Phase 3 — minimum margins (0.5 in), font 8.5–10.5 pt
+    # Phase 3 — minimum margins (0.5 in), font 8.0–10.5 pt
     if len(doc.pages) > 1:
-        doc = binary_search_font("0.50in", 8.5, 10.5)
+        doc = binary_search_font("0.50in", 8.0, 10.5)
 
-    # Phase 4 — still overflows: accept up to 2 pages at 8.5 pt / 0.5 in.
-    # Experience has page-break-inside: avoid so it stays together on page 1;
-    # Education, Certifications, Projects flow naturally to page 2.
+    # Phase 4 — still overflows: accept up to 2 pages at 8.0 pt / 0.5 in.
+    # Individual exp-entry elements have page-break-inside: avoid so entries
+    # stay together; Education, Certifications, Projects flow to page 2.
     if len(doc.pages) > 2:
-        doc = make_doc(8.5, "0.50in")
+        doc = make_doc(8.0, "0.50in")
 
     pdf = doc.write_pdf()
     name = data["personal"]["name"] or "resume"

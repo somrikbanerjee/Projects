@@ -4,6 +4,34 @@ All notable changes to this project are documented here.
 
 ---
 
+## [0.3.7] — 2026-05-23
+
+### Added
+- **Keyboard shortcuts** — three global shortcuts available from any tab:
+  - `Ctrl+S` / `Cmd+S` — opens the Save modal.
+  - `Ctrl+O` / `Cmd+O` — opens the file picker to load a `.resume` file.
+  - `Ctrl+E` / `Cmd+E` — triggers PDF export and download.
+  All three call `e.preventDefault()` to suppress the browser's native handler (save-page, open-file, etc.). `metaKey` is included alongside `ctrlKey` for macOS compatibility.
+
+### Files changed
+- `builder/templates/builder/index.html` — `keydown` event listener added before the init block.
+
+---
+
+## [0.3.6] — 2026-05-23
+
+### Fixed
+- **Contact header items still stacking vertically in PDF** — `display: inline-flex` was the root cause across multiple attempts. WeasyPrint does not reliably render `inline-flex` children in a block container as inline-level boxes; it treats them as block-level, giving each item its own full-width line. Replaced with `display: inline-block` on `.contact-item` and `display: inline-block` on `.contact-icon`, which WeasyPrint honours correctly. Items now flow left-to-right and wrap as atomic units. Verified via layout-preserved `pdftotext` extraction: row 1 contains phone · email · location on one line, row 2 contains LinkedIn · GitHub on one line.
+- **Work Experience section displaced to page 2** — `page-break-inside: avoid` on `.exp-section` was telling WeasyPrint not to split the entire section. With the contact header consuming excessive vertical space (five stacked items ≈ 80pt), there was not enough room left on page 1 for the full Experience block, so WeasyPrint moved the whole section to page 2. The section-level rule has been removed; individual `.exp-entry` elements retain their own `page-break-inside: avoid` to prevent mid-entry splits.
+- **Font floor lowered from 8.5 pt to 8.0 pt** — gives the binary search more range before falling back to margin reduction, reducing the likelihood of needing tighter margins for moderately long resumes.
+
+### Files changed
+- `builder/templates/builder/resume_pdf.html` — `.contact-item` changed to `display: inline-block`; `.contact-icon` changed to `display: inline-block` with `margin-right`; `.exp-section { page-break-inside: avoid }` removed.
+- `builder/templates/builder/index.html` — matching preview CSS updated.
+- `builder/views.py` — binary search font floor changed from `8.5` to `8.0` in all phases.
+
+---
+
 ## [0.3.5] — 2026-05-23
 
 ### Added
