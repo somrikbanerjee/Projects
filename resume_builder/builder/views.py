@@ -1,42 +1,40 @@
+import json
+import os
 from django.shortcuts import render
-from django.http import HttpResponse
+from django.http import HttpResponse, JsonResponse
 from django.views.decorators.http import require_http_methods
 import weasyprint
 
 
 def parse_resume_data(post):
-    """Parse POST data into structured resume dict."""
-
-    def get_list(prefix, fields):
-        entries = []
-        index = 0
-        while True:
-            key = f"{prefix}-{index}-{fields[0]}"
-            if key not in post:
-                break
-            entry = {field: post.get(f"{prefix}-{index}-{field}", "").strip() for field in fields}
-            if any(entry.values()):
-                entries.append(entry)
-            index += 1
-        return entries
-
-    exp_fields = ["company", "start_month", "start_year", "end_month", "end_year", "is_present", "location", "description"]
+    exp_fields = [
+        "company", "start_month", "start_year",
+        "end_month", "end_year", "is_present", "location", "description",
+    ]
     experiences = []
     idx = 0
     while f"exp-{idx}-company" in post:
         entry = {f: post.get(f"exp-{idx}-{f}", "").strip() for f in exp_fields}
         entry["is_present"] = post.get(f"exp-{idx}-is_present") == "on"
         entry["bullets"] = [b.strip() for b in entry["description"].splitlines() if b.strip()]
-        if any(entry[k] for k in ["company", "description"]):
+        if entry.get("company") or entry.get("description"):
             experiences.append(entry)
         idx += 1
+
+    def get_list(prefix, fields):
+        items, i = [], 0
+        while f"{prefix}-{i}-{fields[0]}" in post:
+            item = {f: post.get(f"{prefix}-{i}-{f}", "").strip() for f in fields}
+            if any(item.values()):
+                items.append(item)
+            i += 1
+        return items
 
     educations = get_list("edu", ["institution", "degree", "field", "graduation_month", "graduation_year"])
     certifications = get_list("cert", ["name", "issuer", "date"])
     projects = get_list("proj", ["name", "tech", "description"])
     for proj in projects:
-        desc = proj.get("description", "")
-        proj["bullets"] = [b.strip() for b in desc.splitlines() if b.strip()]
+        proj["bullets"] = [b.strip() for b in proj.get("description", "").splitlines() if b.strip()]
 
     return {
         "personal": {
@@ -55,13 +53,57 @@ def parse_resume_data(post):
 
 
 def index(request):
-    return render(request, "builder/index.html")
+    return render(request, "builder/index.html", {"home_dir": os.path.expanduser("~")})
 
 
 @require_http_methods(["POST"])
-def preview(request):
+def preview_fragment(request):
+    """Returns just the resume HTML fragment for AJAX injection."""
     data = parse_resume_data(request.POST)
-    return render(request, "builder/preview.html", {"resume": data})
+    return render(request, "builder/resume_content.html", {"resume": data})
+
+
+@require_http_methods(["POST"])
+def save_resume(request):
+    data = parse_resume_data(request.POST)
+    directory = request.POST.get("save_directory", "").strip()
+    filename = request.POST.get("save_filename", "").strip()
+
+    if not directory:
+        return JsonResponse({"error": "Directory path is required"}, status=400)
+
+    if not filename:
+        name = data["personal"]["name"] or "resume"
+        filename = name.replace(" ", "_") + ".resume"
+    if not filename.endswith(".resume"):
+        filename += ".resume"
+
+    filepath = os.path.join(directory, filename)
+
+    try:
+        os.makedirs(directory, exist_ok=True)
+        save_data = {
+            "version": "1.0",
+            "personal": data["personal"],
+            "summary": data["summary"],
+            "experiences": [
+                {k: v for k, v in exp.items() if k != "bullets"}
+                for exp in data["experiences"]
+            ],
+            "educations": data["educations"],
+            "certifications": data["certifications"],
+            "projects": [
+                {k: v for k, v in proj.items() if k != "bullets"}
+                for proj in data["projects"]
+            ],
+        }
+        with open(filepath, "w") as f:
+            json.dump(save_data, f, indent=2)
+        return JsonResponse({"success": True, "filepath": filepath})
+    except PermissionError:
+        return JsonResponse({"error": f"Permission denied: {filepath}"}, status=403)
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=500)
 
 
 @require_http_methods(["POST"])

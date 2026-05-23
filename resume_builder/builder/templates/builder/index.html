@@ -5,297 +5,365 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Resume Builder</title>
   <style>
+    :root {
+      --primary: #1e3a5f;
+      --accent:  #2d6a9f;
+      --bg:      #f0f4f8;
+      --card:    #ffffff;
+      --border:  #e2e8f0;
+      --text:    #1a202c;
+      --muted:   #4a5568;
+    }
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', Tahoma, Verdana, sans-serif; background: var(--bg); color: var(--text); }
 
-    body {
-      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-      background: #f0f4f8;
-      color: #1a202c;
-      min-height: 100vh;
+    /* ======== TOP BAR ======== */
+    .topbar {
+      position: sticky; top: 0; z-index: 200;
+      height: 54px;
+      background: linear-gradient(135deg, var(--primary) 0%, var(--accent) 100%);
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 1.25rem;
+      box-shadow: 0 2px 8px rgba(0,0,0,.25);
     }
+    .brand { color: white; font-weight: 700; font-size: 1.05rem; letter-spacing: .3px; display: flex; align-items: center; gap: .45rem; }
+    .topbar-actions { display: flex; align-items: center; gap: .5rem; }
 
-    header {
-      background: linear-gradient(135deg, #1e3a5f 0%, #2d6a9f 100%);
-      color: white;
-      padding: 1.5rem 2rem;
-      display: flex;
-      align-items: center;
-      gap: 1rem;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    .btn { display: inline-flex; align-items: center; gap: .35rem; border: none; border-radius: 6px; padding: .42rem .9rem; font-size: .82rem; font-weight: 600; cursor: pointer; transition: background .15s, transform .1s, opacity .15s; white-space: nowrap; }
+    .btn:hover { transform: translateY(-1px); }
+    .btn:active { transform: translateY(0); }
+    .btn-ghost { background: rgba(255,255,255,.15); color: white; border: 1px solid rgba(255,255,255,.3); }
+    .btn-ghost:hover { background: rgba(255,255,255,.25); }
+    .btn-white { background: white; color: var(--primary); }
+    .btn-white:hover { background: #ebf8ff; }
+    .btn-blue { background: var(--accent); color: white; }
+    .btn-blue:hover { background: var(--primary); }
+
+    /* ======== TAB BAR ======== */
+    .tab-bar {
+      position: sticky; top: 54px; z-index: 199;
+      background: var(--primary);
+      display: flex; align-items: flex-end;
+      padding: 0 1.25rem;
+      border-bottom: 2px solid rgba(255,255,255,.12);
     }
-    header h1 { font-size: 1.6rem; font-weight: 700; letter-spacing: 0.3px; }
-    header p { font-size: 0.9rem; opacity: 0.85; margin-top: 2px; }
-
-    .container { max-width: 860px; margin: 0 auto; padding: 2rem 1.5rem 4rem; }
-
-    /* ---- Section card ---- */
-    .section-card {
-      background: white;
-      border-radius: 10px;
-      box-shadow: 0 1px 4px rgba(0,0,0,0.08);
-      margin-bottom: 1.5rem;
-      overflow: hidden;
+    .tab-btn {
+      background: none; border: none; color: rgba(255,255,255,.55);
+      padding: .6rem 1.4rem; font-size: .78rem; font-weight: 700;
+      letter-spacing: .9px; text-transform: uppercase; cursor: pointer;
+      border-bottom: 3px solid transparent; margin-bottom: -2px;
+      transition: color .15s, border-color .15s;
     }
+    .tab-btn:hover { color: rgba(255,255,255,.85); }
+    .tab-btn.active { color: white; border-bottom-color: #63b3ed; }
+
+    /* ======== PANES ======== */
+    .pane { display: none; }
+    .pane.active { display: block; }
+
+    /* ---- Edit pane ---- */
+    .edit-wrap { max-width: 860px; margin: 0 auto; padding: 1.5rem 1rem 5rem; }
+
+    /* ---- Preview pane ---- */
+    .preview-wrap {
+      background: #c8cdd4;
+      min-height: calc(100vh - 98px);
+      padding: 2rem 1rem;
+      display: flex; flex-direction: column; align-items: center;
+    }
+    .preview-loading {
+      color: #555; font-size: .95rem; padding: 3rem;
+      display: flex; align-items: center; gap: .6rem;
+    }
+    .preview-error { color: #c53030; font-size: .9rem; padding: 1.5rem; background: #fff5f5; border-radius: 8px; }
+
+    /* ======== SECTION CARDS (edit form) ======== */
+    .section-card { background: var(--card); border-radius: 10px; box-shadow: 0 1px 4px rgba(0,0,0,.08); margin-bottom: 1.25rem; overflow: hidden; }
     .section-header {
-      background: #1e3a5f;
-      color: white;
-      padding: 0.75rem 1.25rem;
-      font-weight: 600;
-      font-size: 0.95rem;
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
+      background: var(--primary); color: white;
+      padding: .65rem 1.1rem; font-weight: 600; font-size: .88rem;
+      display: flex; align-items: center; gap: .5rem;
     }
-    .section-header .badge-optional {
-      font-size: 0.72rem;
-      background: rgba(255,255,255,0.2);
-      padding: 2px 8px;
-      border-radius: 20px;
-      font-weight: 400;
-    }
-    .section-body { padding: 1.25rem; }
+    .badge-opt { font-size: .7rem; background: rgba(255,255,255,.2); padding: 1px 7px; border-radius: 20px; font-weight: 400; }
+    .section-body { padding: 1.1rem; }
 
-    /* ---- Form elements ---- */
-    .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
-    .form-grid.three { grid-template-columns: 1fr 1fr 1fr; }
-    .form-grid.full { grid-template-columns: 1fr; }
-
-    .field { display: flex; flex-direction: column; gap: 4px; }
-    .field label { font-size: 0.8rem; font-weight: 600; color: #4a5568; text-transform: uppercase; letter-spacing: 0.4px; }
+    /* ======== FORM ELEMENTS ======== */
+    .fg { display: grid; gap: .85rem; margin-bottom: .85rem; }
+    .fg-2 { grid-template-columns: 1fr 1fr; }
+    .fg-3 { grid-template-columns: 1fr 1fr 1fr; }
+    .fg-1 { grid-template-columns: 1fr; }
+    .field { display: flex; flex-direction: column; gap: 3px; }
+    .field label { font-size: .76rem; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .4px; }
     .field input, .field textarea, .field select {
-      border: 1.5px solid #cbd5e0;
-      border-radius: 6px;
-      padding: 0.5rem 0.65rem;
-      font-size: 0.92rem;
-      color: #1a202c;
-      background: #fafafa;
-      transition: border-color 0.15s, box-shadow 0.15s;
-      width: 100%;
-      font-family: inherit;
+      border: 1.5px solid var(--border); border-radius: 6px;
+      padding: .45rem .6rem; font-size: .9rem; color: var(--text);
+      background: #fafafa; font-family: inherit; width: 100%;
+      transition: border-color .15s, box-shadow .15s;
     }
     .field input:focus, .field textarea:focus, .field select:focus {
-      outline: none;
-      border-color: #2d6a9f;
-      box-shadow: 0 0 0 3px rgba(45,106,159,0.12);
-      background: white;
+      outline: none; border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(45,106,159,.12); background: white;
     }
-    .field textarea { resize: vertical; min-height: 90px; }
-    .field .hint { font-size: 0.75rem; color: #718096; margin-top: 2px; }
+    .field textarea { resize: vertical; min-height: 88px; }
+    .hint { font-size: .73rem; color: #718096; margin-top: 2px; }
 
-    /* ---- Dynamic entry blocks ---- */
-    .entry-block {
-      border: 1.5px solid #e2e8f0;
-      border-radius: 8px;
-      padding: 1rem;
-      margin-bottom: 0.75rem;
-      position: relative;
-      background: #fafafa;
-    }
-    .entry-block .entry-title {
-      font-size: 0.8rem;
-      font-weight: 700;
-      color: #2d6a9f;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      margin-bottom: 0.75rem;
-    }
+    /* ---- Entry blocks ---- */
+    .entry-block { border: 1.5px solid var(--border); border-radius: 8px; padding: .9rem; margin-bottom: .65rem; background: #fafafa; position: relative; }
+    .entry-label { font-size: .75rem; font-weight: 700; color: var(--accent); text-transform: uppercase; letter-spacing: .5px; margin-bottom: .65rem; }
     .remove-btn {
-      position: absolute;
-      top: 0.75rem;
-      right: 0.75rem;
-      background: #fed7d7;
-      color: #c53030;
-      border: none;
-      border-radius: 50%;
-      width: 26px;
-      height: 26px;
-      font-size: 1rem;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      line-height: 1;
-      transition: background 0.15s;
+      position: absolute; top: .7rem; right: .7rem;
+      background: #fed7d7; color: #c53030; border: none; border-radius: 50%;
+      width: 24px; height: 24px; font-size: 1rem; cursor: pointer;
+      display: flex; align-items: center; justify-content: center; line-height: 1;
+      transition: background .15s;
     }
     .remove-btn:hover { background: #fc8181; }
-
     .add-btn {
-      display: flex;
-      align-items: center;
-      gap: 0.4rem;
-      background: #ebf4ff;
-      color: #2b6cb0;
-      border: 1.5px dashed #90cdf4;
-      border-radius: 7px;
-      padding: 0.55rem 1rem;
-      font-size: 0.88rem;
-      font-weight: 600;
-      cursor: pointer;
-      margin-top: 0.25rem;
-      transition: background 0.15s;
-      width: 100%;
-      justify-content: center;
+      width: 100%; display: flex; align-items: center; justify-content: center; gap: .4rem;
+      background: #ebf4ff; color: #2b6cb0; border: 1.5px dashed #90cdf4;
+      border-radius: 7px; padding: .5rem; font-size: .85rem; font-weight: 600; cursor: pointer;
+      margin-top: .1rem; transition: background .15s;
     }
     .add-btn:hover { background: #bee3f8; border-color: #4299e1; }
 
     /* ---- Present toggle ---- */
-    .present-row {
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-      padding: 0.4rem 0;
-    }
-    .present-row input[type=checkbox] { width: 16px; height: 16px; cursor: pointer; accent-color: #2d6a9f; }
-    .present-row label { font-size: 0.87rem; color: #4a5568; cursor: pointer; font-weight: 500; }
-    .end-date-fields { transition: opacity 0.2s; }
+    .present-row { display: flex; align-items: center; gap: .45rem; padding: .35rem 0; }
+    .present-row input[type=checkbox] { width: 15px; height: 15px; accent-color: var(--accent); cursor: pointer; }
+    .present-row label { font-size: .84rem; color: var(--muted); cursor: pointer; font-weight: 500; }
 
-    /* ---- Month/Year pair ---- */
-    .month-year { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
+    /* ======== RESUME STYLES (used inside .preview-wrap) ======== */
+    .resume {
+      width: min(8.5in, 100%);
+      background: white;
+      padding: .75in .75in .75in .75in;
+      font-family: Arial, Helvetica, sans-serif;
+      font-size: 10.5pt;
+      color: #000;
+      line-height: 1.45;
+      box-shadow: 0 6px 30px rgba(0,0,0,.18);
+    }
+    .resume-header { text-align: center; margin-bottom: 12px; border-bottom: 2px solid #1e3a5f; padding-bottom: 8px; }
+    .resume-name { font-size: 22pt; font-weight: 700; letter-spacing: .5px; text-transform: uppercase; }
+    .resume-contact { margin-top: 4px; font-size: 9.5pt; color: #333; display: flex; flex-wrap: wrap; justify-content: center; gap: 3px 14px; }
+    .resume-contact a { color: #2d6a9f; text-decoration: none; }
+    .resume-section { margin-bottom: 12px; }
+    .section-title { font-size: 11pt; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: #1e3a5f; border-bottom: 1.5px solid #1e3a5f; padding-bottom: 2px; margin-bottom: 6px; }
+    .summary-text { font-size: 10pt; line-height: 1.55; }
+    .exp-entry, .edu-entry, .cert-entry, .proj-entry { margin-bottom: 9px; }
+    .exp-header, .edu-header, .proj-header { display: flex; justify-content: space-between; align-items: baseline; }
+    .company-name, .institution-name, .proj-name { font-weight: 700; font-size: 10.5pt; }
+    .date-range { font-size: 9.5pt; color: #555; white-space: nowrap; }
+    .exp-location { font-size: 9.5pt; color: #555; font-style: italic; margin-bottom: 2px; }
+    .edu-degree { font-size: 10pt; margin-top: 1px; }
+    .cert-name { font-weight: 600; }
+    .cert-issuer, .cert-date { color: #555; font-size: 9.5pt; }
+    .proj-tech { font-size: 9.5pt; color: #2d6a9f; font-style: italic; }
+    .bullet-list { margin: 3px 0 0 16px; padding: 0; }
+    .bullet-list li { font-size: 10pt; margin-bottom: 2px; line-height: 1.45; }
 
-    /* ---- Submit buttons ---- */
-    .action-bar {
-      display: flex;
-      gap: 1rem;
-      margin-top: 2rem;
-      justify-content: flex-end;
+    /* ======== MODAL ======== */
+    .modal-overlay {
+      display: none; position: fixed; inset: 0; z-index: 500;
+      background: rgba(0,0,0,.45); align-items: center; justify-content: center;
     }
-    .btn-preview {
-      background: #2d6a9f;
-      color: white;
-      border: none;
-      border-radius: 7px;
-      padding: 0.75rem 2rem;
-      font-size: 1rem;
-      font-weight: 600;
-      cursor: pointer;
-      transition: background 0.15s, transform 0.1s;
+    .modal-overlay.open { display: flex; }
+    .modal-box {
+      background: white; border-radius: 12px; padding: 1.6rem;
+      width: min(440px, 92vw); box-shadow: 0 20px 60px rgba(0,0,0,.3);
     }
-    .btn-preview:hover { background: #1e3a5f; transform: translateY(-1px); }
+    .modal-title { font-size: 1.05rem; font-weight: 700; margin-bottom: 1.1rem; color: var(--primary); }
+    .modal-actions { display: flex; justify-content: flex-end; gap: .6rem; margin-top: 1.2rem; }
+    .modal-error { color: #c53030; font-size: .82rem; margin-top: .5rem; display: none; }
+    .modal-error.show { display: block; }
+
+    /* ======== TOAST ======== */
+    .toast-wrap { position: fixed; bottom: 1.5rem; right: 1.5rem; z-index: 600; display: flex; flex-direction: column; gap: .5rem; }
+    .toast {
+      padding: .65rem 1rem; border-radius: 7px; font-size: .85rem; font-weight: 500;
+      box-shadow: 0 4px 12px rgba(0,0,0,.15); opacity: 0;
+      transform: translateY(8px); transition: opacity .25s, transform .25s;
+      max-width: 320px;
+    }
+    .toast.show { opacity: 1; transform: translateY(0); }
+    .toast.success { background: #c6f6d5; color: #276749; }
+    .toast.error   { background: #fed7d7; color: #9b2c2c; }
+    .toast.info    { background: #bee3f8; color: #2a4365; }
 
     @media (max-width: 600px) {
-      .form-grid, .form-grid.three { grid-template-columns: 1fr; }
+      .fg-2, .fg-3 { grid-template-columns: 1fr; }
     }
   </style>
 </head>
 <body>
 
-<header>
-  <div>
-    <h1>Resume Builder</h1>
-    <p>Create an ATS-friendly resume in minutes</p>
+<!-- ======================================================
+     TOP BAR
+     ====================================================== -->
+<div class="topbar">
+  <div class="brand">&#128196; Resume Builder</div>
+  <div class="topbar-actions">
+    <button class="btn btn-ghost" onclick="triggerLoad()" title="Load a .resume file">
+      &#128194; Load
+    </button>
+    <input type="file" id="load-input" accept=".resume" style="display:none" onchange="loadResumeFile(event)" />
+    <button class="btn btn-ghost" onclick="openSaveModal()" title="Save progress to a .resume file">
+      &#128190; Save
+    </button>
+    <button class="btn btn-white" id="export-btn" style="display:none" onclick="exportPDF()">
+      &#8659; Export PDF
+    </button>
   </div>
-</header>
-
-<div class="container">
-  <form method="POST" action="{% url 'preview' %}">
-    {% csrf_token %}
-
-    <!-- ===== PERSONAL DETAILS ===== -->
-    <div class="section-card">
-      <div class="section-header">&#128100; Personal Details</div>
-      <div class="section-body">
-        <div class="form-grid" style="margin-bottom:1rem;">
-          <div class="field">
-            <label>Full Name *</label>
-            <input type="text" name="name" placeholder="Jane Doe" required />
-          </div>
-          <div class="field">
-            <label>Phone Number *</label>
-            <input type="tel" name="phone" placeholder="+1 (555) 000-0000" required />
-          </div>
-        </div>
-        <div class="form-grid" style="margin-bottom:1rem;">
-          <div class="field">
-            <label>Primary Email *</label>
-            <input type="email" name="email" placeholder="jane@example.com" required />
-          </div>
-          <div class="field">
-            <label>LinkedIn Profile URL</label>
-            <input type="url" name="linkedin" placeholder="https://linkedin.com/in/janedoe" />
-          </div>
-        </div>
-        <div class="form-grid full">
-          <div class="field">
-            <label>Base Location *</label>
-            <input type="text" name="location" placeholder="San Francisco, CA" required />
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- ===== PROFESSIONAL SUMMARY ===== -->
-    <div class="section-card">
-      <div class="section-header">&#128221; Professional Summary</div>
-      <div class="section-body">
-        <div class="field">
-          <textarea name="summary" placeholder="Write 2–4 sentences highlighting your professional identity, core strengths, and career goals..." rows="4"></textarea>
-          <span class="hint">Keep it concise and keyword-rich for ATS.</span>
-        </div>
-      </div>
-    </div>
-
-    <!-- ===== EXPERIENCE ===== -->
-    <div class="section-card">
-      <div class="section-header">&#128188; Work Experience</div>
-      <div class="section-body">
-        <div id="exp-container"></div>
-        <button type="button" class="add-btn" onclick="addEntry('exp')">&#43; Add Experience</button>
-      </div>
-    </div>
-
-    <!-- ===== EDUCATION ===== -->
-    <div class="section-card">
-      <div class="section-header">&#127891; Education</div>
-      <div class="section-body">
-        <div id="edu-container"></div>
-        <button type="button" class="add-btn" onclick="addEntry('edu')">&#43; Add Education</button>
-      </div>
-    </div>
-
-    <!-- ===== CERTIFICATIONS (optional) ===== -->
-    <div class="section-card">
-      <div class="section-header">&#127942; Certifications <span class="badge-optional">Optional</span></div>
-      <div class="section-body">
-        <div id="cert-container"></div>
-        <button type="button" class="add-btn" onclick="addEntry('cert')">&#43; Add Certification</button>
-      </div>
-    </div>
-
-    <!-- ===== PROJECTS (optional) ===== -->
-    <div class="section-card">
-      <div class="section-header">&#128196; Projects <span class="badge-optional">Optional</span></div>
-      <div class="section-body">
-        <div id="proj-container"></div>
-        <button type="button" class="add-btn" onclick="addEntry('proj')">&#43; Add Project</button>
-      </div>
-    </div>
-
-    <div class="action-bar">
-      <button type="submit" class="btn-preview">Preview Resume &#8594;</button>
-    </div>
-  </form>
 </div>
 
+<!-- ======================================================
+     TAB BAR
+     ====================================================== -->
+<div class="tab-bar">
+  <button class="tab-btn active" id="tab-edit"    onclick="switchTab('edit')">&#9998; Edit</button>
+  <button class="tab-btn"        id="tab-preview" onclick="switchTab('preview')">&#128065; Preview</button>
+</div>
+
+<!-- ======================================================
+     EDIT PANE
+     ====================================================== -->
+<div class="pane active" id="pane-edit">
+  <div class="edit-wrap">
+    <form id="resume-form">
+      {% csrf_token %}
+
+      <!-- ===== PERSONAL DETAILS ===== -->
+      <div class="section-card">
+        <div class="section-header">&#128100; Personal Details</div>
+        <div class="section-body">
+          <div class="fg fg-2">
+            <div class="field"><label>Full Name *</label><input type="text" name="name" placeholder="Jane Doe" required /></div>
+            <div class="field"><label>Phone Number *</label><input type="tel" name="phone" placeholder="+1 (555) 000-0000" required /></div>
+          </div>
+          <div class="fg fg-2">
+            <div class="field"><label>Primary Email *</label><input type="email" name="email" placeholder="jane@example.com" required /></div>
+            <div class="field"><label>LinkedIn Profile URL</label><input type="url" name="linkedin" placeholder="https://linkedin.com/in/janedoe" /></div>
+          </div>
+          <div class="fg fg-1">
+            <div class="field"><label>Base Location *</label><input type="text" name="location" placeholder="San Francisco, CA" required /></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== PROFESSIONAL SUMMARY ===== -->
+      <div class="section-card">
+        <div class="section-header">&#128221; Professional Summary</div>
+        <div class="section-body">
+          <div class="field">
+            <textarea name="summary" placeholder="Write 2–4 sentences highlighting your professional identity, core strengths, and career goals..." rows="4"></textarea>
+            <span class="hint">Keep it concise and keyword-rich for ATS.</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== EXPERIENCE ===== -->
+      <div class="section-card">
+        <div class="section-header">&#128188; Work Experience</div>
+        <div class="section-body">
+          <div id="exp-container"></div>
+          <button type="button" class="add-btn" onclick="addEntry('exp')">&#43; Add Experience</button>
+        </div>
+      </div>
+
+      <!-- ===== EDUCATION ===== -->
+      <div class="section-card">
+        <div class="section-header">&#127891; Education</div>
+        <div class="section-body">
+          <div id="edu-container"></div>
+          <button type="button" class="add-btn" onclick="addEntry('edu')">&#43; Add Education</button>
+        </div>
+      </div>
+
+      <!-- ===== CERTIFICATIONS ===== -->
+      <div class="section-card">
+        <div class="section-header">&#127942; Certifications <span class="badge-opt">Optional</span></div>
+        <div class="section-body">
+          <div id="cert-container"></div>
+          <button type="button" class="add-btn" onclick="addEntry('cert')">&#43; Add Certification</button>
+        </div>
+      </div>
+
+      <!-- ===== PROJECTS ===== -->
+      <div class="section-card">
+        <div class="section-header">&#128196; Projects <span class="badge-opt">Optional</span></div>
+        <div class="section-body">
+          <div id="proj-container"></div>
+          <button type="button" class="add-btn" onclick="addEntry('proj')">&#43; Add Project</button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ======================================================
+     PREVIEW PANE
+     ====================================================== -->
+<div class="pane" id="pane-preview">
+  <div class="preview-wrap">
+    <div id="preview-content">
+      <div class="preview-loading">Switch to Preview to render your resume.</div>
+    </div>
+  </div>
+</div>
+
+<!-- ======================================================
+     SAVE MODAL
+     ====================================================== -->
+<div class="modal-overlay" id="save-modal">
+  <div class="modal-box">
+    <div class="modal-title">&#128190; Save Resume</div>
+    <div class="fg fg-1" style="margin-bottom:.85rem;">
+      <div class="field">
+        <label>Save Directory</label>
+        <input type="text" id="save-dir" value="{{ home_dir }}/Documents" placeholder="/home/user/Documents" />
+      </div>
+    </div>
+    <div class="fg fg-1">
+      <div class="field">
+        <label>Filename</label>
+        <input type="text" id="save-filename" placeholder="my_resume  (will append .resume)" />
+        <span class="hint">Leave blank to use your name. Extension .resume is added automatically.</span>
+      </div>
+    </div>
+    <div class="modal-error" id="save-error"></div>
+    <div class="modal-actions">
+      <button class="btn btn-blue" style="background:#e2e8f0;color:#1a202c;" onclick="closeSaveModal()">Cancel</button>
+      <button class="btn btn-blue" onclick="performSave()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- ======================================================
+     TOAST CONTAINER
+     ====================================================== -->
+<div class="toast-wrap" id="toast-wrap"></div>
+
 <script>
+// ─── State ─────────────────────────────────────────────────────────────────
+const counters = { exp: 0, edu: 0, cert: 0, proj: 0 };
+let currentTab = 'edit';
+
+// ─── Month / Year helpers ────────────────────────────────────────────────
 const MONTHS = [
   ['01','January'],['02','February'],['03','March'],['04','April'],
   ['05','May'],['06','June'],['07','July'],['08','August'],
   ['09','September'],['10','October'],['11','November'],['12','December']
 ];
-
-const counters = { exp: 0, edu: 0, cert: 0, proj: 0 };
-
-function monthOptions() {
+function monthOpts() {
   return MONTHS.map(([v,l]) => `<option value="${v}">${l}</option>`).join('');
 }
-
-function yearOptions(from = 1980, to = new Date().getFullYear() + 2) {
-  let opts = '';
-  for (let y = to; y >= from; y--) opts += `<option value="${y}">${y}</option>`;
-  return opts;
+function yearOpts(from=1960, to=new Date().getFullYear()+3) {
+  let s = '';
+  for (let y = to; y >= from; y--) s += `<option value="${y}">${y}</option>`;
+  return s;
 }
 
-function addEntry(type) {
+// ─── Dynamic entry builders ──────────────────────────────────────────────
+function addEntry(type, silent=false) {
   const idx = counters[type]++;
   const container = document.getElementById(`${type}-container`);
   const div = document.createElement('div');
@@ -304,117 +372,69 @@ function addEntry(type) {
 
   if (type === 'exp') {
     div.innerHTML = `
-      <div class="entry-title">Experience #${idx + 1}</div>
-      <button type="button" class="remove-btn" onclick="removeEntry('${type}', ${idx})" title="Remove">&#215;</button>
-      <div class="form-grid" style="margin-bottom:0.75rem;">
-        <div class="field">
-          <label>Company Name *</label>
-          <input type="text" name="exp-${idx}-company" placeholder="Acme Corp" required />
-        </div>
-        <div class="field">
-          <label>Work Location</label>
-          <input type="text" name="exp-${idx}-location" placeholder="New York, NY (Remote)" />
-        </div>
+      <div class="entry-label">Experience #${idx+1}</div>
+      <button type="button" class="remove-btn" onclick="removeEntry('exp',${idx})" title="Remove">&#215;</button>
+      <div class="fg fg-2" style="margin-bottom:.7rem;">
+        <div class="field"><label>Company Name *</label><input type="text" name="exp-${idx}-company" placeholder="Acme Corp" /></div>
+        <div class="field"><label>Work Location</label><input type="text" name="exp-${idx}-location" placeholder="New York, NY (Remote)" /></div>
       </div>
-      <div class="form-grid three" style="margin-bottom:0.5rem;">
-        <div class="field">
-          <label>Start Month</label>
-          <select name="exp-${idx}-start_month"><option value="">Month</option>${monthOptions()}</select>
-        </div>
-        <div class="field">
-          <label>Start Year</label>
-          <select name="exp-${idx}-start_year"><option value="">Year</option>${yearOptions()}</select>
-        </div>
+      <div class="fg fg-3" style="margin-bottom:.5rem;">
+        <div class="field"><label>Start Month</label><select name="exp-${idx}-start_month"><option value="">Month</option>${monthOpts()}</select></div>
+        <div class="field"><label>Start Year</label><select name="exp-${idx}-start_year"><option value="">Year</option>${yearOpts()}</select></div>
         <div class="field" style="justify-content:flex-end;">
           <label>&nbsp;</label>
           <div class="present-row">
             <input type="checkbox" id="exp-${idx}-present-cb" name="exp-${idx}-is_present" onchange="togglePresent(${idx})" />
-            <label for="exp-${idx}-present-cb">Currently Working Here</label>
+            <label for="exp-${idx}-present-cb">Currently Here</label>
           </div>
         </div>
       </div>
-      <div class="form-grid" id="exp-${idx}-end-fields" style="margin-bottom:0.75rem;">
-        <div class="field">
-          <label>End Month</label>
-          <select name="exp-${idx}-end_month"><option value="">Month</option>${monthOptions()}</select>
-        </div>
-        <div class="field">
-          <label>End Year</label>
-          <select name="exp-${idx}-end_year"><option value="">Year</option>${yearOptions()}</select>
-        </div>
+      <div class="fg fg-2" id="exp-${idx}-end-fields" style="margin-bottom:.7rem;">
+        <div class="field"><label>End Month</label><select name="exp-${idx}-end_month"><option value="">Month</option>${monthOpts()}</select></div>
+        <div class="field"><label>End Year</label><select name="exp-${idx}-end_year"><option value="">Year</option>${yearOpts()}</select></div>
       </div>
       <div class="field">
         <label>Description / Responsibilities</label>
-        <textarea name="exp-${idx}-description" placeholder="• Led a team of 5 engineers to deliver X feature&#10;• Reduced load time by 40% by optimizing Y&#10;• (Enter each bullet on a new line)"></textarea>
-        <span class="hint">Enter each responsibility on a new line. It will appear as a bullet point.</span>
+        <textarea name="exp-${idx}-description" placeholder="• Led a team of 5 engineers to deliver X feature&#10;• Reduced load time by 40% by optimising Y&#10;(each line becomes a bullet point)"></textarea>
+        <span class="hint">Enter each responsibility on a new line — each will appear as a bullet.</span>
       </div>`;
   } else if (type === 'edu') {
     div.innerHTML = `
-      <div class="entry-title">Education #${idx + 1}</div>
-      <button type="button" class="remove-btn" onclick="removeEntry('${type}', ${idx})" title="Remove">&#215;</button>
-      <div class="form-grid" style="margin-bottom:0.75rem;">
-        <div class="field">
-          <label>Institution *</label>
-          <input type="text" name="edu-${idx}-institution" placeholder="MIT" required />
-        </div>
-        <div class="field">
-          <label>Degree *</label>
-          <input type="text" name="edu-${idx}-degree" placeholder="Bachelor of Science" required />
-        </div>
+      <div class="entry-label">Education #${idx+1}</div>
+      <button type="button" class="remove-btn" onclick="removeEntry('edu',${idx})" title="Remove">&#215;</button>
+      <div class="fg fg-2" style="margin-bottom:.7rem;">
+        <div class="field"><label>Institution *</label><input type="text" name="edu-${idx}-institution" placeholder="MIT" /></div>
+        <div class="field"><label>Degree *</label><input type="text" name="edu-${idx}-degree" placeholder="Bachelor of Science" /></div>
       </div>
-      <div class="form-grid three">
-        <div class="field" style="grid-column: span 2;">
-          <label>Field of Study</label>
-          <input type="text" name="edu-${idx}-field" placeholder="Computer Science" />
-        </div>
-        <div class="field" style="grid-column:1;">
-          <label>Grad Month</label>
-          <select name="edu-${idx}-graduation_month"><option value="">Month</option>${monthOptions()}</select>
-        </div>
-        <div class="field">
-          <label>Grad Year</label>
-          <select name="edu-${idx}-graduation_year"><option value="">Year</option>${yearOptions()}</select>
-        </div>
+      <div class="fg fg-3">
+        <div class="field" style="grid-column:span 2;"><label>Field of Study</label><input type="text" name="edu-${idx}-field" placeholder="Computer Science" /></div>
+      </div>
+      <div class="fg fg-2" style="margin-top:.7rem;">
+        <div class="field"><label>Graduation Month</label><select name="edu-${idx}-graduation_month"><option value="">Month</option>${monthOpts()}</select></div>
+        <div class="field"><label>Graduation Year</label><select name="edu-${idx}-graduation_year"><option value="">Year</option>${yearOpts()}</select></div>
       </div>`;
   } else if (type === 'cert') {
     div.innerHTML = `
-      <div class="entry-title">Certification #${idx + 1}</div>
-      <button type="button" class="remove-btn" onclick="removeEntry('${type}', ${idx})" title="Remove">&#215;</button>
-      <div class="form-grid three">
-        <div class="field">
-          <label>Certification Name *</label>
-          <input type="text" name="cert-${idx}-name" placeholder="AWS Solutions Architect" />
-        </div>
-        <div class="field">
-          <label>Issuing Organization</label>
-          <input type="text" name="cert-${idx}-issuer" placeholder="Amazon Web Services" />
-        </div>
-        <div class="field">
-          <label>Date Obtained</label>
-          <input type="month" name="cert-${idx}-date" />
-        </div>
+      <div class="entry-label">Certification #${idx+1}</div>
+      <button type="button" class="remove-btn" onclick="removeEntry('cert',${idx})" title="Remove">&#215;</button>
+      <div class="fg fg-3">
+        <div class="field"><label>Certification Name</label><input type="text" name="cert-${idx}-name" placeholder="AWS Solutions Architect" /></div>
+        <div class="field"><label>Issuing Organisation</label><input type="text" name="cert-${idx}-issuer" placeholder="Amazon Web Services" /></div>
+        <div class="field"><label>Date Obtained</label><input type="month" name="cert-${idx}-date" /></div>
       </div>`;
   } else if (type === 'proj') {
     div.innerHTML = `
-      <div class="entry-title">Project #${idx + 1}</div>
-      <button type="button" class="remove-btn" onclick="removeEntry('${type}', ${idx})" title="Remove">&#215;</button>
-      <div class="form-grid" style="margin-bottom:0.75rem;">
-        <div class="field">
-          <label>Project Name *</label>
-          <input type="text" name="proj-${idx}-name" placeholder="Inventory Management System" />
-        </div>
-        <div class="field">
-          <label>Technologies Used</label>
-          <input type="text" name="proj-${idx}-tech" placeholder="Python, Django, PostgreSQL, React" />
-        </div>
+      <div class="entry-label">Project #${idx+1}</div>
+      <button type="button" class="remove-btn" onclick="removeEntry('proj',${idx})" title="Remove">&#215;</button>
+      <div class="fg fg-2" style="margin-bottom:.7rem;">
+        <div class="field"><label>Project Name</label><input type="text" name="proj-${idx}-name" placeholder="Inventory Management System" /></div>
+        <div class="field"><label>Technologies Used</label><input type="text" name="proj-${idx}-tech" placeholder="Python, Django, PostgreSQL, React" /></div>
       </div>
       <div class="field">
         <label>Description</label>
-        <textarea name="proj-${idx}-description" placeholder="• Built a REST API handling 10k requests/day&#10;• Implemented role-based access control&#10;(Enter each point on a new line)"></textarea>
-        <span class="hint">Enter each point on a new line. It will appear as a bullet point.</span>
+        <textarea name="proj-${idx}-description" placeholder="• Built a REST API handling 10k requests/day&#10;• Implemented role-based access control&#10;(each line becomes a bullet point)"></textarea>
       </div>`;
   }
-
   container.appendChild(div);
 }
 
@@ -425,17 +445,207 @@ function removeEntry(type, idx) {
 
 function togglePresent(idx) {
   const cb = document.getElementById(`exp-${idx}-present-cb`);
-  const endFields = document.getElementById(`exp-${idx}-end-fields`);
-  if (cb.checked) {
-    endFields.style.opacity = '0.35';
-    endFields.style.pointerEvents = 'none';
-  } else {
-    endFields.style.opacity = '1';
-    endFields.style.pointerEvents = 'auto';
+  const fields = document.getElementById(`exp-${idx}-end-fields`);
+  fields.style.opacity = cb.checked ? '.35' : '1';
+  fields.style.pointerEvents = cb.checked ? 'none' : 'auto';
+}
+
+// ─── Tab switching ───────────────────────────────────────────────────────
+function switchTab(tab) {
+  currentTab = tab;
+  document.getElementById('pane-edit').classList.toggle('active', tab === 'edit');
+  document.getElementById('pane-preview').classList.toggle('active', tab === 'preview');
+  document.getElementById('tab-edit').classList.toggle('active', tab === 'edit');
+  document.getElementById('tab-preview').classList.toggle('active', tab === 'preview');
+  document.getElementById('export-btn').style.display = tab === 'preview' ? 'inline-flex' : 'none';
+  if (tab === 'preview') loadPreview();
+}
+
+// ─── AJAX Preview ────────────────────────────────────────────────────────
+async function loadPreview() {
+  const content = document.getElementById('preview-content');
+  content.innerHTML = '<div class="preview-loading"><span>&#8635;</span> Rendering preview…</div>';
+  try {
+    const fd = new FormData(document.getElementById('resume-form'));
+    const res = await fetch('{% url "preview" %}', { method: 'POST', body: fd });
+    if (!res.ok) throw new Error(`Server error ${res.status}`);
+    content.innerHTML = await res.text();
+  } catch (err) {
+    content.innerHTML = `<div class="preview-error">&#9888; Failed to load preview: ${err.message}</div>`;
   }
 }
 
-// Pre-add one entry for each section on load
+// ─── Export PDF ──────────────────────────────────────────────────────────
+async function exportPDF() {
+  showToast('Generating PDF…', 'info');
+  try {
+    const fd = new FormData(document.getElementById('resume-form'));
+    const res = await fetch('{% url "download_pdf" %}', { method: 'POST', body: fd });
+    if (!res.ok) throw new Error(`Server error ${res.status}`);
+    const blob = await res.blob();
+    const name = document.querySelector('[name="name"]').value.trim().replace(/\s+/g,'_') || 'Resume';
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `${name}_Resume.pdf`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+    showToast('PDF downloaded!', 'success');
+  } catch (err) {
+    showToast(`PDF error: ${err.message}`, 'error');
+  }
+}
+
+// ─── Save modal ──────────────────────────────────────────────────────────
+function openSaveModal() {
+  const nameEl = document.querySelector('[name="name"]');
+  const name = nameEl ? nameEl.value.trim().replace(/\s+/g,'_') : '';
+  const fi = document.getElementById('save-filename');
+  if (!fi.value && name) fi.value = name + '.resume';
+  document.getElementById('save-error').classList.remove('show');
+  document.getElementById('save-modal').classList.add('open');
+}
+function closeSaveModal() {
+  document.getElementById('save-modal').classList.remove('open');
+}
+
+async function performSave() {
+  const dir = document.getElementById('save-dir').value.trim();
+  const file = document.getElementById('save-filename').value.trim();
+  const errEl = document.getElementById('save-error');
+  errEl.classList.remove('show');
+
+  if (!dir) { errEl.textContent = 'Directory is required.'; errEl.classList.add('show'); return; }
+
+  const fd = new FormData(document.getElementById('resume-form'));
+  fd.set('save_directory', dir);
+  fd.set('save_filename', file);
+
+  try {
+    const res = await fetch('{% url "save_resume" %}', { method: 'POST', body: fd });
+    const data = await res.json();
+    if (data.success) {
+      closeSaveModal();
+      showToast(`Saved to ${data.filepath}`, 'success');
+    } else {
+      errEl.textContent = data.error || 'Unknown error.';
+      errEl.classList.add('show');
+    }
+  } catch (err) {
+    errEl.textContent = `Network error: ${err.message}`;
+    errEl.classList.add('show');
+  }
+}
+
+// ─── Load .resume file ───────────────────────────────────────────────────
+function triggerLoad() { document.getElementById('load-input').click(); }
+
+function loadResumeFile(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const data = JSON.parse(e.target.result);
+      populateForm(data);
+      showToast('Resume loaded — switch to Edit to review.', 'success');
+      if (currentTab === 'preview') loadPreview();
+    } catch {
+      showToast('Invalid .resume file.', 'error');
+    }
+  };
+  reader.readAsText(file);
+  event.target.value = '';
+}
+
+// ─── Form helpers ────────────────────────────────────────────────────────
+function fval(name) {
+  const el = document.querySelector(`[name="${name}"]`);
+  return el ? el.value : '';
+}
+function setFval(name, value) {
+  const el = document.querySelector(`[name="${name}"]`);
+  if (el) el.value = value ?? '';
+}
+
+// ─── Populate form from loaded JSON ──────────────────────────────────────
+function populateForm(data) {
+  // Reset dynamic sections
+  ['exp','edu','cert','proj'].forEach(t => {
+    document.getElementById(`${t}-container`).innerHTML = '';
+    counters[t] = 0;
+  });
+
+  const p = data.personal || {};
+  setFval('name',     p.name     || '');
+  setFval('phone',    p.phone    || '');
+  setFval('email',    p.email    || '');
+  setFval('linkedin', p.linkedin || '');
+  setFval('location', p.location || '');
+  setFval('summary',  data.summary || '');
+
+  (data.experiences || []).forEach(exp => {
+    const idx = counters.exp;
+    addEntry('exp', true);
+    setFval(`exp-${idx}-company`,     exp.company     || '');
+    setFval(`exp-${idx}-location`,    exp.location    || '');
+    setFval(`exp-${idx}-start_month`, exp.start_month || '');
+    setFval(`exp-${idx}-start_year`,  exp.start_year  || '');
+    setFval(`exp-${idx}-end_month`,   exp.end_month   || '');
+    setFval(`exp-${idx}-end_year`,    exp.end_year    || '');
+    setFval(`exp-${idx}-description`, exp.description || '');
+    if (exp.is_present) {
+      const cb = document.getElementById(`exp-${idx}-present-cb`);
+      if (cb) { cb.checked = true; togglePresent(idx); }
+    }
+  });
+
+  (data.educations || []).forEach(edu => {
+    const idx = counters.edu;
+    addEntry('edu', true);
+    setFval(`edu-${idx}-institution`,       edu.institution       || '');
+    setFval(`edu-${idx}-degree`,            edu.degree            || '');
+    setFval(`edu-${idx}-field`,             edu.field             || '');
+    setFval(`edu-${idx}-graduation_month`,  edu.graduation_month  || '');
+    setFval(`edu-${idx}-graduation_year`,   edu.graduation_year   || '');
+  });
+
+  (data.certifications || []).forEach(cert => {
+    const idx = counters.cert;
+    addEntry('cert', true);
+    setFval(`cert-${idx}-name`,   cert.name   || '');
+    setFval(`cert-${idx}-issuer`, cert.issuer || '');
+    setFval(`cert-${idx}-date`,   cert.date   || '');
+  });
+
+  (data.projects || []).forEach(proj => {
+    const idx = counters.proj;
+    addEntry('proj', true);
+    setFval(`proj-${idx}-name`,        proj.name        || '');
+    setFval(`proj-${idx}-tech`,        proj.tech        || '');
+    setFval(`proj-${idx}-description`, proj.description || '');
+  });
+}
+
+// ─── Toast notifications ─────────────────────────────────────────────────
+function showToast(msg, type='info') {
+  const wrap = document.getElementById('toast-wrap');
+  const t = document.createElement('div');
+  t.className = `toast ${type}`;
+  t.textContent = msg;
+  wrap.appendChild(t);
+  requestAnimationFrame(() => { requestAnimationFrame(() => t.classList.add('show')); });
+  setTimeout(() => {
+    t.classList.remove('show');
+    setTimeout(() => t.remove(), 300);
+  }, 3500);
+}
+
+// ─── Close modal on overlay click ────────────────────────────────────────
+document.getElementById('save-modal').addEventListener('click', e => {
+  if (e.target === e.currentTarget) closeSaveModal();
+});
+
+// ─── Init ────────────────────────────────────────────────────────────────
 addEntry('exp');
 addEntry('edu');
 </script>
