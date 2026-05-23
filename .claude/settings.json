@@ -11,7 +11,8 @@
       "Bash(python3 manage.py check)",
       "Bash(pkill -f \"manage.py runserver\")",
       "Bash(python3 -m py_compile builder/views.py)",
-      "Bash(python3 -c ' *)"
+      "Bash(python3 -c ' *)",
+      "Bash(grep -v \"^$\")"
     ]
   }
 }

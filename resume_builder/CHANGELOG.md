@@ -4,6 +4,17 @@ All notable changes to this project are documented here.
 
 ---
 
+## [0.3.4] — 2026-05-23
+
+### Fixed
+- **Broken contact header in PDF export** — contact items (phone number, location, LinkedIn URL, GitHub URL) were splitting mid-content in WeasyPrint: "+91" / "8017310607" on separate lines, "Hyderabad," / "India" split at the comma, and URLs breaking at `/` characters. Root cause: `white-space: nowrap` was missing from `.contact-item`, so WeasyPrint (which does not apply browser-style lenient wrapping) broke text at every space or URL delimiter within each item. Added `white-space: nowrap` to keep each contact item atomic — it either fits on the current flex row as a whole or moves to the next row as a whole.
+
+### Files changed
+- `builder/templates/builder/resume_pdf.html` — `white-space: nowrap` added to `.contact-item`.
+- `builder/templates/builder/index.html` — `white-space: nowrap` added to `.contact-item` in the preview CSS for consistency.
+
+---
+
 ## [0.3.3] — 2026-05-23
 
 ### Added
