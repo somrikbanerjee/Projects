@@ -229,7 +229,8 @@ def _tree_shap_inference(
         "se": np.full(k, np.nan), "t": np.full(k, np.nan),
         "p":  np.full(k, np.nan), "df_res": float(max(n - k, 1)),
         "residuals": residuals,   "base_value": float(np.mean(y_arr)),
-        "mean_shap": np.full(k, np.nan),
+        "mean_shap":     np.full(k, np.nan),
+        "mean_abs_shap": np.full(k, np.nan),
     }
 
     if not _HAS_SHAP:
@@ -242,7 +243,8 @@ def _tree_shap_inference(
     except Exception:
         return _nan_inf
 
-    mean_shap = sv.mean(axis=0)                               # (k,)
+    mean_shap     = sv.mean(axis=0)                            # (k,)
+    mean_abs_shap = np.abs(sv).mean(axis=0)                    # (k,) — before clipping
 
     # ── Post-hoc positivity constraints ───────────────────────────────────────
     if positive_coef:
@@ -258,13 +260,14 @@ def _tree_shap_inference(
         p = 2.0 * stats.t.sf(np.abs(t), df=float(n - 1))
 
     return {
-        "se":         se,
-        "t":          t,
-        "p":          p,
-        "df_res":     float(max(n - k, 1)),
-        "residuals":  residuals,
-        "base_value": base_value,
-        "mean_shap":  mean_shap,
+        "se":             se,
+        "t":              t,
+        "p":              p,
+        "df_res":         float(max(n - k, 1)),
+        "residuals":      residuals,
+        "base_value":     base_value,
+        "mean_shap":      mean_shap,
+        "mean_abs_shap":  mean_abs_shap,   # for impactable allocation
     }
 
 
@@ -393,13 +396,14 @@ def _fit_tree_model(
         pvalue_method += f"  [Post-hoc positivity: {'; '.join(_notes)}]"
 
     # ── TreeSHAP inference ────────────────────────────────────────────────────
-    inf        = _tree_shap_inference(mdl, X_arr, y_arr,
-                                       positive_coef=_positive_coef,
-                                       positive_intercept=_positive_int)
-    beta_coef  = inf["mean_shap"]
-    base_value = inf["base_value"]
-    residuals  = inf["residuals"]
-    df_res     = inf["df_res"]
+    inf           = _tree_shap_inference(mdl, X_arr, y_arr,
+                                          positive_coef=_positive_coef,
+                                          positive_intercept=_positive_int)
+    beta_coef     = inf["mean_shap"]
+    mean_abs_shap = inf["mean_abs_shap"]   # unclipped, for impactable allocation
+    base_value    = inf["base_value"]
+    residuals     = inf["residuals"]
+    df_res        = inf["df_res"]
     se, t_stat, pval = inf["se"], inf["t"], inf["p"]
 
     # ── Coefficient DataFrame ─────────────────────────────────────────────────
@@ -424,13 +428,16 @@ def _fit_tree_model(
     stats_dict["base_value"] = base_value   # SHAP E[f(x)] for display
 
     return {
-        "coef_df":       coef_df,
-        "stats":         stats_dict,
-        "fitted":        fitted,
-        "residuals":     residuals,
-        "model_type":    model_type,
-        "params":        params,
-        "pvalue_method": pvalue_method,
+        "coef_df":                coef_df,
+        "stats":                  stats_dict,
+        "fitted":                 fitted,
+        "residuals":              residuals,
+        "model_type":             model_type,
+        "params":                 params,
+        "pvalue_method":          pvalue_method,
+        # Per-feature mean(|SHAP|) for proportional impactable allocation in Tab 3.
+        # Stored as {feature_name: mean_abs_shap} so it survives column reordering.
+        "mean_abs_shap_by_feature": dict(zip(feat_names, mean_abs_shap.tolist())),
     }
 
 

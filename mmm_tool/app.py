@@ -193,12 +193,22 @@ section[data-testid="stSidebar"]   { display: none !important; }
   background-color: #dbeafe !important;
   color:            var(--primary) !important;
   border-radius:    5px !important;
+  margin-left:      4px !important;   /* prevent first-char clipping at wrapper left edge */
 }
 
 /* ── Input / select ───────────────────────────────────────────────────── */
 [data-baseweb="input"] > div,
 [data-baseweb="select"] > div:first-child {
   border-radius: 7px !important;
+}
+
+/* ── Multiselect inner tag-row: boost left padding so the first tag's
+      first character is always clear of the overflow:hidden clip edge.
+      The baseweb default is padding-left:5px which places the first tag
+      right at the clip boundary; raising it to 10px gives ample clearance
+      regardless of font-rendering sub-pixel differences. ──────────────── */
+[data-baseweb="select"] > div:first-child > div:first-child {
+  padding-left: 10px !important;
 }
 
 /* ── Alerts ───────────────────────────────────────────────────────────── */
@@ -215,6 +225,24 @@ h1              {
   padding-bottom: 0.35rem !important;
   margin-bottom:  1rem !important;
   display:        inline-block !important;
+}
+
+/* ── Section-completion indicators ────────────────────────────────────── */
+/* Zero-height invisible marker div injected right before each expander.
+   CSS :has() + adjacent-sibling lets us style the expander that follows. */
+.expander-state {
+  height: 0; line-height: 0; overflow: hidden;
+  margin: 0 !important; padding: 0 !important;
+}
+/* "Done" expander: primary-colour left border + subtle glow */
+div:has(.expander-state.done) + div [data-testid="stExpander"] {
+  border-left-color: var(--primary) !important;
+  border-left-width: 3px !important;
+  box-shadow: -1px 0 10px rgba(37,99,235,0.10), var(--shadow) !important;
+}
+/* Tint the summary text to match */
+div:has(.expander-state.done) + div [data-testid="stExpander"] details[open] summary {
+  color: var(--primary) !important;
 }
 
 /* ── Custom labels ────────────────────────────────────────────────────── */
@@ -417,6 +445,17 @@ def get_processed_df() -> pd.DataFrame | None:
     return df
 
 
+def _expander_done(is_done: bool) -> None:
+    """Inject a zero-height marker div immediately before an expander.
+
+    CSS ``div:has(.expander-state.done) + div [data-testid="stExpander"]``
+    matches this element's sibling container and adds a primary-coloured left
+    border so users can see at a glance which sections are configured.
+    """
+    cls = "expander-state done" if is_done else "expander-state"
+    st.markdown(f'<div class="{cls}"></div>', unsafe_allow_html=True)
+
+
 def _download_buttons(df: pd.DataFrame, prefix: str) -> None:
     if df is None or df.empty:
         return
@@ -479,6 +518,7 @@ def tab_preprocessing() -> None:
     with left:
 
         # ── ① Upload ─────────────────────────────────────────────────────────
+        _expander_done(st.session_state.df_original is not None)
         with st.expander("① Upload Dataset", expanded=st.session_state.df_original is None):
             uploaded = st.file_uploader("CSV or XLSX", type=["csv", "xlsx", "xls"], key=wk("uploader"))
             if uploaded is not None and uploaded.name != st.session_state.uploaded_filename:
@@ -513,6 +553,7 @@ def tab_preprocessing() -> None:
             return _get_tab1_df()
 
         # ── ② Datetime ───────────────────────────────────────────────────────
+        _expander_done(len(cfg["datetime_columns"]) > 0)
         with st.expander("② Convert to Datetime"):
             dt_sel = st.multiselect("Columns to convert", raw_cols,
                                     default=cfg["datetime_columns"], key=wk("dt_cols"))
@@ -521,6 +562,7 @@ def tab_preprocessing() -> None:
                 st.rerun()
 
         # ── ③ Grouping ───────────────────────────────────────────────────────
+        _expander_done(len(cfg["groupby_columns"]) > 0)
         with st.expander("③ Grouping Columns  *(for mean / minmax normalisation)*"):
             grp_sel = st.multiselect("Group by", raw_cols,
                                      default=[c for c in cfg["groupby_columns"] if c in raw_cols],
@@ -532,6 +574,7 @@ def tab_preprocessing() -> None:
                 st.caption(f"Mean/MinMax normalisation will use `{grp_sel}` as group keys.")
 
         # ── ④ Pivot ──────────────────────────────────────────────────────────
+        _expander_done(bool(cfg.get("pivot", {}).get("header_col")))
         with st.expander("④ Pivot Dataset"):
             p = cfg["pivot"] or {}
             enable_pivot = st.checkbox("Enable pivot", value=bool(p.get("header_col")), key=wk("pivot_enabled"))
@@ -564,6 +607,7 @@ def tab_preprocessing() -> None:
         _cdf = cur_df_now()
 
         # ── ⑤ Calculated Columns ─────────────────────────────────────────────
+        _expander_done(len(cfg["calculated_columns"]) > 0)
         with st.expander("⑤ Calculated Columns"):
             to_del = None
             for i, calc in enumerate(cfg["calculated_columns"]):
@@ -633,6 +677,7 @@ def tab_preprocessing() -> None:
         _cdf = cur_df_now()
 
         # ── ⑥ Normalise ──────────────────────────────────────────────────────
+        _expander_done(len(cfg["normalizations"]) > 0)
         with st.expander("⑥ Normalise Columns"):
             to_del_n = None
             for i, norm in enumerate(cfg["normalizations"]):
@@ -716,6 +761,7 @@ def tab_preprocessing() -> None:
         _cc = cur_cols_now()
 
         # ── ⑦ Sort ───────────────────────────────────────────────────────────
+        _expander_done(len(cfg["sort_config"]) > 0)
         with st.expander("⑦ Sort Data"):
             to_del_s = None
             for i, s in enumerate(cfg["sort_config"]):
@@ -744,6 +790,9 @@ def tab_preprocessing() -> None:
         _cdf = cur_df_now()
 
         # ── ⑧ Input / Target ─────────────────────────────────────────────────
+        _expander_done(
+            bool(cfg.get("target_column")) and len(cfg.get("input_columns", [])) > 0
+        )
         with st.expander("⑧ Input & Target Columns", expanded=True):
             t_opts = [""] + _cc
             cur_t = cfg.get("target_column") or ""
@@ -1012,6 +1061,7 @@ def tab_adstock() -> None:
     with left:
 
         # ── ① Media Channels ─────────────────────────────────────────────────
+        _expander_done(len(cfg.get("media_channels", [])) > 0)
         with st.expander("① Media Channels", expanded=True):
             st.caption(
                 "Select columns that represent paid media/channel spend or impressions. "
@@ -1043,6 +1093,7 @@ def tab_adstock() -> None:
                 st.caption("No target variable set — configure in Tab 1 → ⑧.")
 
         # ── ② Auto-Fit ────────────────────────────────────────────────────────
+        _expander_done(cfg.get("autofit", {}).get("result") is not None)
         with st.expander("② Auto-Fit", expanded=False):
             st.caption(
                 "Randomly search feature subsets, transformation pipelines, model "
@@ -1288,6 +1339,7 @@ def tab_adstock() -> None:
                     st.rerun()
 
         # ── ③ Transformations ─────────────────────────────────────────────────
+        _expander_done(len(cfg.get("adstock_transforms", [])) > 0)
         with st.expander("③ Transformations", expanded=True):
             st.caption(
                 "Add transforms in any order. "
@@ -1538,6 +1590,7 @@ def tab_adstock() -> None:
                             st.rerun()
 
         # ── ④ Date Filter (applied after transforms) ──────────────────────────
+        _expander_done(bool(cfg.get("date_filter", {}).get("col")))
         with st.expander("④ Date Filter"):
             st.caption(
                 "Subset the analysis window. "
@@ -1745,6 +1798,8 @@ def _build_impactable_df(
     target_col: str,
     cfg: dict,
     is_tree: bool = False,
+    r2: float | None = None,
+    mean_abs_shap_by_feature: dict | None = None,
 ) -> pd.DataFrame | None:
     """Compute per-channel impactable contributions and % of total KPI.
 
@@ -1756,10 +1811,20 @@ def _build_impactable_df(
     Linear models — contribution of feature i across all observations:
         abs_impactable_i  =  β_i  ×  Σ_t x_it  ×  scale_y
 
-    Tree models (SHAP) — SHAP values are not the same as β × x;
-    the mean SHAP is the average marginal contribution per observation, so
-    the total contribution across all n observations is n × mean_SHAP:
-        abs_impactable_i  =  mean_SHAP_i  ×  n  ×  scale_y
+    Tree models (SHAP) — SHAP values are not defined as β × x; the base
+    value of an RF / XGBoost model equals the training-set mean prediction,
+    which absorbs the average KPI level.  The per-feature mean SHAP therefore
+    represents only variation around the mean and sums to ≈ 0 for a well-
+    fitted model, making it uninformative as an absolute contribution metric.
+
+    Instead, tree impactables use a proportional allocation approach:
+        weight_i          =  mean(|SHAP_i,t| over t)   (unclipped magnitude)
+        abs_impactable_i  =  (weight_i / Σ_j weight_j) × R² × total_target × scale_y
+
+    This distributes the model-explained portion of total KPI (R² × total_KPI)
+    among features in proportion to each feature's average absolute SHAP
+    magnitude.  The channel percentages therefore sum to exactly R² × 100 %,
+    which is bounded by 100 %.
 
     scale_y is the inverse-normalisation scale of the *target* column
     (from Tab 1 only).  If the target was not normalised in Tab 1, scale_y = 1
@@ -1787,57 +1852,100 @@ def _build_impactable_df(
     else:
         total_target = float(np.nansum(y_arr) * scale_y)
 
+    if total_target == 0.0 or np.isnan(total_target):
+        return None
+
     rows_out: list[dict] = []
 
-    for _, coef_row in coef_df.iterrows():
-        feat = coef_row["Feature"]
+    # ── Tree models: proportional allocation based on mean(|SHAP|) ───────────
+    if is_tree and mean_abs_shap_by_feature:
+        _r2 = float(r2) if (r2 is not None and not np.isnan(float(r2))) else 1.0
+        _r2 = max(0.0, min(1.0, _r2))   # clamp to [0, 1]
 
-        # Intercept / base-value rows are excluded from the channel table
-        if feat in {"(Intercept)", "(Base Value)"}:
-            continue
-
-        try:
-            beta = float(coef_row["Coefficient"])
-            if np.isnan(beta):
+        # Collect channel rows (skip intercept/base-value)
+        chan_feats = []
+        for _, coef_row in coef_df.iterrows():
+            feat = coef_row["Feature"]
+            if feat in {"(Intercept)", "(Base Value)"}:
                 continue
-        except Exception:
-            continue
+            if feat not in model_df.columns:
+                continue
+            chan_feats.append(feat)
 
-        if feat not in model_df.columns:
-            continue
+        # Sum of mean_abs_shap weights over all channel features
+        total_weight = sum(
+            float(mean_abs_shap_by_feature.get(f, 0.0)) for f in chan_feats
+        )
 
-        # ── Compute raw contribution (model scale) ─────────────────────────
-        if is_tree:
-            # For tree models: total SHAP contribution = n × mean_SHAP
-            # (each observation contributes mean_SHAP regardless of feature value)
-            if isinstance(scale_y, np.ndarray):
-                # Column-norm: weight each "slot" by its per-row scale
-                abs_imp = float(np.nansum(beta * scale_y))  # beta × Σ scale_y_t
+        for feat in chan_feats:
+            w = float(mean_abs_shap_by_feature.get(feat, 0.0))
+            if total_weight > 0:
+                share   = w / total_weight
+                abs_imp = share * _r2 * total_target
+                imp_pct = share * _r2 * 100.0
             else:
-                abs_imp = float(beta * n * scale_y)
-        else:
-            # For linear models: total contribution = β × Σ x_t
+                abs_imp = 0.0
+                imp_pct = 0.0
+            rows_out.append({
+                "Feature":             feat,
+                "Absolute Impactable": abs_imp,
+                "Impactable %":        imp_pct,
+            })
+
+    else:
+        # ── Linear models (and tree fallback when mean_abs_shap unavailable) ─
+        for _, coef_row in coef_df.iterrows():
+            feat = coef_row["Feature"]
+
+            # Intercept / base-value rows are excluded from the channel table
+            if feat in {"(Intercept)", "(Base Value)"}:
+                continue
+
+            try:
+                beta = float(coef_row["Coefficient"])
+                if np.isnan(beta):
+                    continue
+            except Exception:
+                continue
+
+            if feat not in model_df.columns:
+                continue
+
+            # Linear models: total contribution = β × Σ x_t × scale_y
             x_arr = model_df[feat].values.astype(float)
             if isinstance(scale_y, np.ndarray):
                 abs_imp = float(np.nansum(beta * x_arr * scale_y))
             else:
                 abs_imp = float(beta * float(np.nansum(x_arr)) * scale_y)
 
-        imp_pct = (
-            abs_imp / total_target * 100.0
-            if (total_target != 0.0 and not np.isnan(total_target))
-            else np.nan
-        )
+            imp_pct = abs_imp / total_target * 100.0
 
-        rows_out.append({
-            "Feature":             feat,
-            "Absolute Impactable": abs_imp,
-            "Impactable %":        imp_pct,
-        })
+            rows_out.append({
+                "Feature":             feat,
+                "Absolute Impactable": abs_imp,
+                "Impactable %":        imp_pct,
+            })
 
     if not rows_out:
         return None
-    return pd.DataFrame(rows_out)
+
+    result_df = pd.DataFrame(rows_out)
+
+    # ── Cap total at 100 % (proportional scaling) ─────────────────────────────
+    # Can exceed 100 % for linear models when the intercept is negative: the
+    # channels compensate for a below-zero baseline, making their raw sum
+    # overshoot total KPI.  Scale every row down proportionally so the
+    # reported contributions stay interpretable and sum ≤ 100 %.
+    total_pct = result_df["Impactable %"].sum()
+    if total_pct > 100.0 and not np.isnan(total_pct):
+        scale = 100.0 / total_pct
+        result_df["Absolute Impactable"] = result_df["Absolute Impactable"] * scale
+        result_df["Impactable %"]        = result_df["Impactable %"]        * scale
+        result_df["_scaled"] = True          # flag for UI note
+    else:
+        result_df["_scaled"] = False
+
+    return result_df
 
 
 def _fmt_pval(v) -> str:
@@ -1931,6 +2039,7 @@ def tab_modelling() -> None:
     with left:
 
         # ── ① Feature Selection ──────────────────────────────────────────────
+        _expander_done(len(mcfg.get("features", [])) > 0)
         with st.expander("① Feature Selection", expanded=True):
             st.caption(
                 "Choose columns from Tab 1 input channels (including any in-place "
@@ -1972,6 +2081,7 @@ def tab_modelling() -> None:
             st.caption(f"Target: **{target_col}**")
 
         # ── ② Model & Hyperparameters ────────────────────────────────────────
+        _expander_done(mcfg.get("result") is not None)
         with st.expander("② Model & Hyperparameters", expanded=True):
 
             stored_model = mcfg.get("model_type", "linear")
@@ -2496,6 +2606,8 @@ def tab_modelling() -> None:
                     target_col,
                     cfg,
                     is_tree=_is_tree,
+                    r2=result.get("stats", {}).get("r2"),
+                    mean_abs_shap_by_feature=result.get("mean_abs_shap_by_feature"),
                 )
 
                 if imp_df is None or imp_df.empty:
@@ -2510,9 +2622,12 @@ def tab_modelling() -> None:
                     )
                     _imp_notes: list[str] = []
                     if _is_tree:
+                        _r2_pct = round(result.get("stats", {}).get("r2", 0) * 100, 1)
                         _imp_notes.append(
-                            "Tree model: coefficient = mean SHAP value; "
-                            "impactable is an approximation."
+                            f"Tree model: impactable = proportional share of "
+                            f"model-explained KPI (R²={_r2_pct}%) "
+                            "based on mean absolute SHAP magnitudes. "
+                            "Channel percentages sum to R² × 100 %."
                         )
                     if _target_normed:
                         _imp_notes.append(
@@ -2527,7 +2642,16 @@ def tab_modelling() -> None:
                         )
                     st.caption("  ·  ".join(_imp_notes))
 
-                    imp_display = imp_df.copy()
+                    # Warn when proportional scaling was applied
+                    if imp_df.get("_scaled", pd.Series([False])).any():
+                        st.warning(
+                            "⚠️ **Channel contributions summed to > 100 %** — this happens when "
+                            "the model has a negative intercept (baseline), so the media channels "
+                            "compensate by over-attributing relative to total KPI.  "
+                            "Values have been scaled proportionally so the total equals 100 %."
+                        )
+
+                    imp_display = imp_df.drop(columns=["_scaled"], errors="ignore").copy()
                     imp_display["Absolute Impactable"] = (
                         imp_df["Absolute Impactable"].map(lambda v: f"{v:,.4f}")
                     )

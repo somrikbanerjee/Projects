@@ -4,6 +4,22 @@ All notable changes to MMM Tool are documented here.
 
 ---
 
+## v0.3.1 — UI Polish
+
+### Added
+
+- **Section completion indicators** — every numbered expander gains a blue left border once its section has been configured (e.g. Upload Dataset highlights after a file is loaded, Grouping Columns highlights after at least one group key is chosen). This gives an at-a-glance view of how far through the workflow you are.
+
+### Changed
+
+- **Multiselect tag spacing** — increased inner padding of the tag row so the first character of the first selected tag is no longer clipped at the container edge regardless of browser or display scaling.
+
+### Removed
+
+- **Dark mode** — the custom `@media (prefers-color-scheme: dark)` CSS block has been removed. The app is light-mode only. Streamlit's built-in dark theme can still be toggled via the Streamlit settings menu, but custom styling will not adapt to it.
+
+---
+
 ## v0.3.0 — Tab 3: Prior Modeling
 
 ### Added

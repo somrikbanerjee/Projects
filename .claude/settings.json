@@ -38,7 +38,19 @@
       "Bash(python -c \"import xgboost; print\\('xgboost', xgboost.__version__\\)\")",
       "Bash(python -c \"import sklearn; print\\('sklearn', sklearn.__version__\\)\")",
       "Bash(python -m py_compile utils/autofit.py)",
-      "Bash(python3)"
+      "Bash(python3)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:8502/)",
+      "Bash(python3 -c \"import playwright; print\\('playwright installed'\\)\")",
+      "Bash(python3 -m playwright install chromium)",
+      "Bash(pkill -f \"streamlit run\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:8503/)",
+      "Bash(lsof -ti:8501 -ti:8502 -ti:8503)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:8501/)",
+      "Bash(python3 -c \"import ast; ast.parse\\(open\\('app.py'\\).read\\(\\)\\); print\\('✅ syntax OK'\\)\")",
+      "Bash(python3 -c \"import ast; ast.parse\\(open\\('/home/somrikb/Documents/Projects/mmm_tool/app.py'\\).read\\(\\)\\); print\\('✅ syntax OK'\\)\")",
+      "Bash(python -c \"import ast; ast.parse\\(open\\('app.py'\\).read\\(\\)\\); print\\('syntax OK'\\)\")",
+      "Bash(python3 -c \"import playwright\")",
+      "Bash(python3 -c \"from PIL import Image\")"
     ]
   }
 }

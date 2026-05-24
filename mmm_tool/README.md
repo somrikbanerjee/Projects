@@ -43,6 +43,8 @@ streamlit run app.py
 
 The app opens at `http://localhost:8501` by default.
 
+> **Theme:** MMM Tool is styled for **light mode only**. If your browser or OS is set to dark mode, Streamlit's built-in theme switcher may apply a dark background to native widgets, but the custom UI elements will retain their light-mode appearance. For the intended look, set Streamlit to the Light theme via **☰ → Settings → Theme → Light**.
+
 ---
 
 ## Navigation
