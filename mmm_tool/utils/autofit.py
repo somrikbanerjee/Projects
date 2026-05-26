@@ -27,6 +27,14 @@ model is evaluated on recent data only.
 
 The search runs in a daemon background thread so the Streamlit UI remains
 responsive and a Cancel button can interrupt it mid-run.
+
+Threading model
+---------------
+``start_autofit()`` spawns a daemon thread that writes to a shared mutable
+dict stored in the module-level ``_TASKS`` registry.  The Streamlit UI polls
+this dict on each rerun (every ~0.5 s while a task is running) by calling
+``get_task(task_id)``.  No locks are used; updates from the worker thread are
+atomic enough for Python's GIL to keep the UI reads consistent.
 """
 from __future__ import annotations
 
@@ -44,6 +52,7 @@ from utils.modelling import fit_model
 
 # ─────────────────────────────── CONSTANTS ────────────────────────────────────
 
+# Human-readable labels for each optimisation metric, shown in the UI
 METRIC_LABELS: dict[str, str] = {
     "r2":     "R²",
     "adj_r2": "Adj. R²",
@@ -53,34 +62,103 @@ METRIC_LABELS: dict[str, str] = {
     "bic":    "BIC",
 }
 
+# Metrics for which a HIGHER value is better.
+# All other metrics (RMSE, MAE, AIC, BIC) are "lower is better" and are
+# negated by _to_score() so the search always maximises the score.
 _METRIC_HIGHER: frozenset = frozenset({"r2", "adj_r2"})
 
 
 # ─────────────────────────────── TASK REGISTRY ────────────────────────────────
 # Module-level dict — persists for the lifetime of the Streamlit server process.
-# Keys are task_id strings; values are mutable state dicts written by the worker
-# thread and read by the UI polling loop.
+# Keys are task_id strings (UUID4); values are mutable state dicts written by
+# the worker thread and read by the UI polling loop.
+#
+# State dict schema:
+#   status       : str  — "running" | "refitting" | "complete" | "no_result" | "cancelled"
+#   progress     : float — fraction of iterations completed, 0.0–1.0
+#   elapsed      : float — wall-clock seconds since task start
+#   eta          : float — estimated seconds remaining
+#   iter         : int   — last completed iteration index (1-based)
+#   cancel       : bool  — set True by cancel_task() to signal the worker to stop
+#   done         : bool  — True once the worker has exited its main loop
+#   result       : dict | None — best_config dict (set on completion)
+#   error        : str | None  — exception message if the worker crashed
+#   best_score   : float — best metric value seen so far (for live display)
+#   best_config  : dict | None — best config seen so far (for live display)
 
 _TASKS: dict[str, dict] = {}
 
 
 def get_task(task_id: str) -> dict | None:
+    """Look up a running or completed task by its ID.
+
+    Parameters
+    ----------
+    task_id : str
+        UUID4 string returned by / passed to ``start_autofit()``.
+
+    Returns
+    -------
+    dict | None
+        The mutable task state dict, or None if the task_id is unknown.
+    """
     return _TASKS.get(task_id)
 
 
 def cancel_task(task_id: str) -> None:
+    """Signal the worker thread to stop at its next iteration boundary.
+
+    Sets ``task["cancel"] = True`` in the task state dict.  The worker checks
+    this flag at the top of each iteration and exits cleanly when it is set.
+
+    Parameters
+    ----------
+    task_id : str
+        ID of the task to cancel.
+    """
     if task_id in _TASKS:
         _TASKS[task_id]["cancel"] = True
 
 
 def cleanup_task(task_id: str) -> None:
+    """Remove a task from the registry, freeing its memory.
+
+    Should be called by the UI after a task completes, cancels, or errors so
+    that the module-level dict does not grow unboundedly across long sessions.
+
+    Parameters
+    ----------
+    task_id : str
+        ID of the task to remove.
+    """
     _TASKS.pop(task_id, None)
 
 
 # ─────────────────────────────── DATA HELPERS ─────────────────────────────────
 
 def _apply_date_filter(df: pd.DataFrame, date_cfg: dict) -> pd.DataFrame:
-    """Mirror of get_processed_df's date-filter logic."""
+    """Apply the user's Tab 2 date-range filter to a DataFrame.
+
+    Mirrors the date-filter logic in ``get_processed_df()`` in app.py.  The
+    Auto-Fit worker uses this to apply the same window the user has configured
+    in the UI before fitting each candidate model.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        DataFrame to filter.
+    date_cfg : dict
+        Date filter configuration with keys:
+          - ``col``      : name of the date column.
+          - ``min_date`` : start date (datetime.date).
+          - ``max_date`` : end date (datetime.date).
+
+    Returns
+    -------
+    pd.DataFrame
+        Filtered DataFrame (reset index).  Returns df unchanged if date_cfg is
+        incomplete or if the date column is not found.
+    """
     if not (date_cfg.get("col") and date_cfg.get("min_date") is not None
             and date_cfg.get("max_date") is not None):
         return df
@@ -96,13 +174,35 @@ def _apply_date_filter(df: pd.DataFrame, date_cfg: dict) -> pd.DataFrame:
 
 
 def _last_n_months(df: pd.DataFrame, date_col: str | None, n: int = 12) -> pd.DataFrame:
-    """Trim df to the last n calendar months using date_col.  Falls back gracefully."""
+    """Subset df to the last n calendar months relative to the most recent date.
+
+    Auto-Fit evaluates each candidate on recent data only (last 12 months by
+    default) so that the model is not dominated by old patterns.  This is
+    applied *after* transforms so adstock carry-over from older periods is
+    still correctly computed over the full history.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        DataFrame to trim.
+    date_col : str | None
+        Name of the date column.  If None or not found, returns df unchanged.
+    n : int
+        Number of calendar months to keep (default 12).
+
+    Returns
+    -------
+    pd.DataFrame
+        Rows whose date falls strictly after (max_date − n months), reset index.
+        Falls back to the full df if the date column is missing or invalid.
+    """
     if not date_col or date_col not in df.columns:
         return df
     try:
         dt     = pd.to_datetime(df[date_col])
         max_dt = dt.max()
         cutoff = max_dt - pd.DateOffset(months=n)
+        # Strictly after the cutoff (so the boundary month is excluded)
         return df[dt > cutoff].reset_index(drop=True)
     except Exception:
         return df
@@ -115,7 +215,25 @@ def _compute_metrics(
     y_pred: np.ndarray,
     n_params: int,
 ) -> dict:
-    """Compute R², Adj.R², RMSE, MAE, AIC, BIC from raw predictions (no SHAP)."""
+    """Compute regression fit metrics from raw predictions (lightweight, no SHAP).
+
+    Used during the random search iterations where speed is critical.  Avoids
+    the full fit_model inference path (which calls TreeSHAP) in favour of a
+    direct numpy implementation.
+
+    Parameters
+    ----------
+    y_true : np.ndarray of shape (n,)
+        Observed target values.
+    y_pred : np.ndarray of shape (n,)
+        Model predictions.
+    n_params : int
+        Total number of estimated parameters (used for Adj. R², AIC, BIC).
+
+    Returns
+    -------
+    dict with keys: ``r2``, ``adj_r2``, ``rmse``, ``mae``, ``aic``, ``bic``
+    """
     n   = len(y_true)
     res = y_true - y_pred
     rss = float(np.sum(res ** 2))
@@ -127,6 +245,7 @@ def _compute_metrics(
     rmse   = float(np.sqrt(rss / n))
     mae    = float(np.mean(np.abs(res)))
 
+    # Information-theoretic criteria via Gaussian log-likelihood
     if rss > 0:
         log_lik = -0.5 * n * (np.log(rss / n) + 1.0 + np.log(2.0 * np.pi))
         aic = float(-2.0 * log_lik + 2.0 * n_params)
@@ -139,7 +258,25 @@ def _compute_metrics(
 
 
 def _to_score(metrics: dict, metric: str) -> float:
-    """Normalise to 'higher is better'."""
+    """Normalise a metric value to a "higher is always better" score.
+
+    Metrics in ``_METRIC_HIGHER`` (R², Adj. R²) are returned as-is.
+    All other metrics (RMSE, MAE, AIC, BIC) are negated so maximising the
+    score is equivalent to minimising those error/information metrics.
+
+    Parameters
+    ----------
+    metrics : dict
+        Metric dict returned by ``_compute_metrics()``.
+    metric : str
+        Metric key to extract and normalise.
+
+    Returns
+    -------
+    float
+        Normalised score: higher is always better.
+        Returns ``-inf`` if the metric value is NaN or missing.
+    """
     v = metrics.get(metric.lower(), np.nan)
     if v is None or (isinstance(v, float) and np.isnan(v)):
         return -np.inf
@@ -157,25 +294,50 @@ def _pvals_ok(
 ) -> bool:
     """Return True if every non-NaN feature p-value is ≤ max_pval.
 
-    Each model type uses the same inference method that ``fit_model`` will use
-    in the final refit, so the check during search is consistent with what
-    Tab 3 will display.
+    When the user sets a maximum p-value constraint in Auto-Fit, each candidate
+    configuration is tested here before being admitted as a valid solution.
+    The inference method used during the search matches what ``fit_model()``
+    will use in the final refit, so the check is consistent with what Tab 3
+    will ultimately display.
 
-    Ridge → sandwich covariance  (Cov(β) ≈ σ² (X'X+αI)⁻¹ X'X (X'X+αI)⁻¹)
-    Linear / Lasso / ElasticNet → active-set OLS
-    Tree models → TreeSHAP t-test: H₀: mean(SHAP) = 0, df = n−1
+    Inference methods by model type:
+      Ridge            → sandwich covariance  (Cov(β) ≈ σ² (X'X+αI)⁻¹ X'X (X'X+αI)⁻¹)
+      Linear / Lasso / ElasticNet → active-set OLS on non-zero support
+      Tree models      → TreeSHAP t-test: H₀: mean(SHAP) = 0, df = n−1
+
+    Parameters
+    ----------
+    mdl
+        Fitted scikit-learn compatible model.
+    model_type : str
+        Model type key (same values as fit_model()).
+    X_arr : np.ndarray of shape (n, k)
+        Feature matrix.
+    y_arr : np.ndarray of shape (n,)
+        Target vector.
+    max_pval : float
+        Maximum allowed p-value for any feature.
+
+    Returns
+    -------
+    bool
+        True → all feature p-values ≤ max_pval (or max_pval ≥ 1.0, which
+        disables the constraint).
+        On any exception the function returns True (accept the candidate) so
+        that SHAP unavailability never silently prunes all tree models.
     """
     if max_pval >= 1.0:
-        return True
+        return True   # Constraint disabled — accept all candidates
     try:
         n, k = X_arr.shape
 
         # ── Tree models ──────────────────────────────────────────────────────
+        # Use the TreeSHAP t-test: t = mean_SHAP / (std_SHAP / √n)
         if model_type in ("randomforest", "xgboost"):
             try:
                 import shap as _shap
-                exp    = _shap.TreeExplainer(mdl)
-                sv     = np.array(exp.shap_values(X_arr), dtype=float)  # (n, k)
+                exp     = _shap.TreeExplainer(mdl)
+                sv      = np.array(exp.shap_values(X_arr), dtype=float)  # (n, k)
                 mean_sv = sv.mean(axis=0)
                 std_sv  = sv.std(axis=0, ddof=1)
                 se      = np.where(std_sv > 1e-12, std_sv / np.sqrt(n), np.nan)
@@ -185,7 +347,7 @@ def _pvals_ok(
                 valid_p = p_vals[~np.isnan(p_vals)]
                 return bool((valid_p <= max_pval).all()) if len(valid_p) > 0 else True
             except Exception:
-                return True   # SHAP unavailable → accept candidate
+                return True   # SHAP unavailable → accept candidate without p-value check
 
         beta = np.asarray(mdl.coef_).ravel()
         ic   = float(np.atleast_1d(mdl.intercept_)[0])
@@ -210,6 +372,7 @@ def _pvals_ok(
             return bool((valid_p <= max_pval).all()) if len(valid_p) > 0 else True
 
         # ── Linear / Lasso / ElasticNet — active-set OLS ─────────────────────
+        # Augment with intercept column if needed, then limit to active (non-zero) params.
         if fi:
             X_aug = np.column_stack([np.ones(n), X_arr])
             b     = np.concatenate([[ic], beta])
@@ -219,7 +382,7 @@ def _pvals_ok(
 
         active = np.abs(b) > 1e-12
         if not active.any():
-            return True   # all coefficients zero → vacuously satisfied
+            return True   # All coefficients zero → vacuously satisfied
 
         X_act = X_aug[:, active]
         b_act = b[active]
@@ -238,7 +401,7 @@ def _pvals_ok(
         return bool((valid_p <= max_pval).all()) if len(valid_p) > 0 else True
 
     except Exception:
-        return True   # on any error, accept the candidate
+        return True   # On any unexpected error accept the candidate
 
 
 # ─────────────────────────────── TRANSFORM SAMPLING ──────────────────────────
@@ -251,34 +414,78 @@ def _sample_col_transforms(
 ) -> tuple[list[dict], str]:
     """Sample a random transform chain for one column.
 
-    Returns (transform_list, final_column_name).
-    Probabilities are tuned for typical MMM datasets.
+    Transforms are applied in a fixed order that respects the causal and
+    statistical dependencies between steps:
+
+      1. Moving Average  — smoothing before adstock; optional for all columns.
+      2. Mean Centering  — remove the level before lagging; optional.
+      3. Lag             — shift in time before adstock carry-over.
+      4. Adstock         — carry-over model; media columns only.
+      5. Normalisation   — scale after adstock so regression coefficients are
+                           comparable; media columns only.
+      6. Saturation      — diminishing returns; only after adstock (not raw spend).
+      7. Zero Mask       — zero out periods where the KPI is zero; optional.
+
+    Probabilities are tuned heuristically for typical weekly / monthly MMM
+    datasets:
+      - MA and lag are included in roughly 1/3 of iterations.
+      - Adstock is included 60 % of the time for media (the main MMM transform).
+      - Saturation follows adstock 40 % of the time (requires adstock first).
+      - Zero mask is applied 30 % of the time when the KPI has zero periods.
+
+    Parameters
+    ----------
+    col : str
+        Source column name.
+    is_media : bool
+        Whether this column is a declared media / paid channel.  Adstock,
+        normalisation, and saturation are only applied to media columns.
+    has_target_zeros : bool
+        Whether the target column contains any zeros.  Zero mask is only
+        sampled when True (meaningless otherwise).
+    rng : np.random.Generator
+        Seeded NumPy random number generator for reproducibility.
+
+    Returns
+    -------
+    tuple[list[dict], str]
+        (transform_list, final_column_name)
+        ``transform_list`` — flat list of transform dicts for
+                             apply_tab2_transformations().
+        ``final_column_name`` — the column name after all transforms are applied
+                                 (may differ from ``col`` when adstock/norm/saturation
+                                 creates new columns with suffixes).
     """
-    T:   list[dict] = []
-    cur: str        = col
+    T:   list[dict] = []   # Accumulated transform dicts
+    cur: str        = col  # Tracks the current output column name
 
     # 1 · Moving Average (in-place, group-aware) ───────────────────────────────
+    # Applied before adstock to smooth noisy weekly spend data.
     if rng.random() < 0.35:
         win = int(rng.choice([2, 3, 4, 6, 12]))
         T.append({"source_col": cur, "type": "moving_avg",
                   "params": {"n": win}, "output_col": cur})
 
     # 2 · Mean Centering (in-place, group-aware) ───────────────────────────────
+    # Removes the series mean so the lag transform doesn't introduce a step.
     if rng.random() < 0.25:
         T.append({"source_col": cur, "type": "mean_center",
                   "params": {}, "output_col": cur})
 
     # 3 · Lag (in-place, group-aware) ──────────────────────────────────────────
+    # Models the delayed response of a predictor (e.g. competitor price last month).
     if rng.random() < 0.35:
         n_lag = int(rng.choice([1, 2, 3, 4]))
         T.append({"source_col": cur, "type": "lag",
                   "params": {"n": n_lag}, "output_col": cur})
 
     # 4 · Adstock — media only (creates new column) ────────────────────────────
+    # Carry-over model: spend today continues to influence sales in future periods.
     if is_media and rng.random() < 0.60:
         method  = str(rng.choice(["geometric", "weibull", "hill"]))
         max_lag = int(rng.choice([2, 4, 6, 8, 12]))
         p: dict = {"method": method, "max_lag": max_lag}
+        # Sample method-specific parameters
         if method == "geometric":
             p["alpha"] = float(rng.uniform(0.1, 0.9))
         elif method == "weibull":
@@ -290,9 +497,10 @@ def _sample_col_transforms(
         out = f"{cur}_adstock"
         T.append({"source_col": cur, "type": "adstock",
                   "params": p, "output_col": out})
-        cur = out
+        cur = out   # Future transforms operate on the adstock column
 
     # 5 · Norm — media only (creates new column) ───────────────────────────────
+    # Scales the adstock series so coefficients across channels are comparable.
     if is_media and rng.random() < 0.50:
         method = str(rng.choice(["minmax", "mean", "z-score"]))
         out    = f"{cur}_norm"
@@ -301,7 +509,8 @@ def _sample_col_transforms(
         cur = out
 
     # 6 · Saturation — media only, and only when adstock already applied ────────
-    # Saturation on a raw (non-adstocked) signal is not meaningful in MMM.
+    # Saturation on raw (non-adstocked) spend is not meaningful in MMM because
+    # the spend spike in a single period doesn't represent true cumulative exposure.
     if is_media and cur.endswith("_adstock") and rng.random() < 0.40:
         c_val = float(rng.uniform(0.5, 2.0))
         d_val = float(10 ** rng.uniform(-4, -1))   # log-uniform 0.0001–0.1
@@ -311,6 +520,8 @@ def _sample_col_transforms(
         cur = out
 
     # 7 · Zero Mask (in-place) ─────────────────────────────────────────────────
+    # Forces feature values to 0 where the KPI is also 0 — useful for "dark"
+    # periods (channel spend recorded but no KPI activity, e.g. store closures).
     if has_target_zeros and rng.random() < 0.30:
         T.append({"source_col": cur, "type": "zero_mask",
                   "params": {}, "output_col": cur})
@@ -320,6 +531,7 @@ def _sample_col_transforms(
 
 # ─────────────────────────────── MULTI-MODEL FAST FIT ─────────────────────────
 
+# All model types considered during the Auto-Fit search
 _ALL_MODEL_TYPES: frozenset = frozenset(
     {"linear", "ridge", "lasso", "elasticnet", "randomforest", "xgboost"}
 )
@@ -336,30 +548,62 @@ def _try_all_models(
     max_pval: float = 1.0,
     allowed_models: frozenset | set | None = None,
 ) -> tuple[str, dict, dict] | None:
-    """Fit the allowed model types and return the best (model_type, params, metrics).
+    """Fit all allowed model types and return the best (model_type, params, metrics).
 
-    Tree models are always evaluated regardless of positivity constraints.
-    Positivity is enforced for linear models during fitting; for tree models,
-    constraint flags are stored in params so the final refit can apply
-    post-hoc SHAP clipping to contributions and the base value.
+    This is the inner loop of the random search.  For speed, tree models use
+    reduced n_estimators (RF: 30, XGB: 20) during the search; the final refit
+    (after the search completes) uses the user-specified counts.
 
-    When max_pval < 1.0 candidates where any feature p-value exceeds that
-    threshold are rejected — using the same inference method as fit_model:
-    Ridge sandwich covariance; active-set OLS for other linear models;
-    SHAP t-test for tree models.
+    Model selection
+    ---------------
+    All allowed model types are fitted with randomly sampled hyperparameters.
+    For linear models, positivity is enforced during fitting (sklearn's
+    ``positive=True``).  For tree models, positivity flags are stored in the
+    params dict and applied post-hoc to SHAP outputs in the final refit.
 
-    n_estimators is capped at 30 (RF) / 20 (XGB) during search for speed.
+    When ``max_pval < 1.0``, candidates where any feature p-value exceeds the
+    threshold are rejected via ``_pvals_ok()``.
+
+    Parameters
+    ----------
+    X_arr : np.ndarray of shape (n, k)
+        Feature matrix for the current candidate configuration.
+    y_arr : np.ndarray of shape (n,)
+        Target vector.
+    n_features : int
+        Number of features (= k, for parameter counting in metrics).
+    rng : np.random.Generator
+        Seeded random number generator.
+    pos_coef : bool
+        Enforce non-negative coefficients (linear models) / clip SHAP (trees).
+    pos_int : bool
+        Reject models with negative intercept (linear) / clip base value (trees).
+    metric : str
+        Optimisation metric key (e.g. ``"adj_r2"``).
+    max_pval : float
+        Maximum allowed p-value for any feature.  1.0 disables the check.
+    allowed_models : frozenset | set | None
+        Set of model type keys to consider.  None means all model types.
+
+    Returns
+    -------
+    tuple[str, dict, dict] | None
+        (model_type, params, metrics) for the best admitted candidate, or None
+        if no candidate passed all constraints.
     """
     if allowed_models is None:
         allowed_models = _ALL_MODEL_TYPES
     from sklearn.linear_model import LinearRegression, Ridge, Lasso, ElasticNet
     from sklearn.ensemble import RandomForestRegressor
 
-    candidates: list[tuple[float, str, dict, dict]] = []  # (score, model_type, params, metrics)
+    # Accumulates all admitted (score, model_type, params, metrics) tuples
+    candidates: list[tuple[float, str, dict, dict]] = []
 
     def _add(model_type: str, mdl, p_used: dict, n_par: int) -> None:
+        """Score a fitted model and add it to candidates if constraints pass."""
         try:
             y_pred = mdl.predict(X_arr)
+            # Reject if intercept constraint is violated (linear models)
             if pos_int and hasattr(mdl, "intercept_"):
                 ic = float(np.atleast_1d(mdl.intercept_)[0])
                 if ic < 0:
@@ -374,12 +618,14 @@ def _try_all_models(
             pass
 
     # ── Linear models ─────────────────────────────────────────────────────────
-    alpha_r  = float(10 ** rng.uniform(-3, 2))    # Ridge alpha
-    alpha_l  = float(10 ** rng.uniform(-3, 1))    # Lasso / EN alpha
-    l1_ratio = float(rng.uniform(0.1, 0.9))
+    # Hyperparameters are sampled from log-uniform distributions which give
+    # better coverage over several orders of magnitude than uniform sampling.
+    alpha_r  = float(10 ** rng.uniform(-3, 2))    # Ridge: α in [0.001, 100]
+    alpha_l  = float(10 ** rng.uniform(-3, 1))    # Lasso/EN: α in [0.001, 10]
+    l1_ratio = float(rng.uniform(0.1, 0.9))       # EN mixing ratio
 
     lm_kw = {"fit_intercept": True, "positive": pos_coef}
-    n_lin = n_features + 1  # +1 for intercept
+    n_lin = n_features + 1  # +1 for intercept in parameter count
 
     if "linear" in allowed_models:
         try:
@@ -417,12 +663,14 @@ def _try_all_models(
             pass
 
     # ── Tree models (positivity applied post-hoc to SHAP outputs) ─────────────
+    # n_estimators is intentionally capped at 30/20 during the search loop for
+    # speed.  The final refit (after the loop) uses the user-specified counts.
     if "randomforest" in allowed_models:
-        rf_depth = int(rng.choice([3, 5, 7, 0]))  # 0 → None (unlimited)
+        rf_depth = int(rng.choice([3, 5, 7, 0]))  # 0 → None (unlimited depth)
         rf_leaf  = int(rng.choice([1, 2, 3, 5]))
-        # Constraint flags stored for final refit; not passed to sklearn constructor.
+        # Store positivity flags in params so _fit_tree_model can apply them at refit
         rf_p = {
-            "n_estimators":       30,
+            "n_estimators":       30,   # Reduced for search speed
             "max_depth":          None if rf_depth == 0 else rf_depth,
             "min_samples_leaf":   rf_leaf,
             "max_features":       "sqrt",
@@ -441,6 +689,7 @@ def _try_all_models(
                 n_jobs=-1,
             )
             mdl.fit(X_arr, y_arr)
+            # Use n_features (not n_lin) — tree models don't have an intercept term
             _add("randomforest", mdl, rf_p, n_features)
         except Exception:
             pass
@@ -451,7 +700,7 @@ def _try_all_models(
             xgb_depth = int(rng.choice([3, 4, 5, 6]))
             xgb_lr    = float(rng.choice([0.05, 0.1, 0.2, 0.3]))
             xgb_p = {
-                "n_estimators":       20,
+                "n_estimators":       20,   # Reduced for search speed
                 "max_depth":          xgb_depth,
                 "learning_rate":      xgb_lr,
                 "subsample":          0.8,
@@ -480,7 +729,8 @@ def _try_all_models(
             pass
 
     if not candidates:
-        return None
+        return None   # No admitted candidate found
+    # Return the candidate with the highest normalised score
     best = max(candidates, key=lambda x: x[0])
     return best[1], best[2], best[3]   # model_type, params, metrics
 
@@ -501,10 +751,61 @@ def _autofit_worker(
     date_filter_cfg: dict | None,
     date_col: str | None,
 ) -> None:
+    """Execute the random search in a background daemon thread.
+
+    This function runs the full Auto-Fit random search algorithm and writes
+    progress / results back into the shared ``_TASKS[task_id]`` dict.  It is
+    never called directly — use ``start_autofit()`` instead.
+
+    Algorithm (per iteration)
+    -------------------------
+    1. Sample a random subset of input columns (media cols always included).
+    2. For each selected column, sample a random transform chain.
+    3. Apply all transforms to a fresh copy of df (full date range so adstock
+       carry-over is correct).
+    4. Apply the date filter (if configured) and trim to the last 12 months.
+    5. Fit all allowed model types and select the best by the chosen metric.
+    6. Update best_config if this iteration beats the current best score.
+
+    After the loop the best configuration is refit once with full inference
+    (TreeSHAP for trees, sandwich/OLS for linear models) via fit_model().
+
+    Parameters
+    ----------
+    task_id : str
+        UUID4 key in ``_TASKS``.  Must be pre-populated before calling.
+    df : pd.DataFrame
+        Snapshot of the Tab 1 processed data (already copied by start_autofit).
+    target_col : str
+        Name of the target (KPI) column.
+    input_cols : list[str]
+        All available input column names (media + non-media).
+    media_cols : list[str]
+        Subset of input_cols that are declared media / channel columns.
+    groupby_cols : list[str]
+        Groupby columns passed to apply_tab2_transformations().
+    constraints : dict
+        Keys:
+          - ``positive_coefficients`` (bool)
+          - ``positive_intercept``    (bool)
+          - ``max_pval``              (float)
+          - ``allowed_models``        (list[str])
+    metric : str
+        Optimisation metric key (e.g. ``"adj_r2"``).
+    n_iter : int
+        Total number of random configurations to evaluate.
+    seed : int
+        Random seed for reproducibility.
+    date_filter_cfg : dict | None
+        Date filter configuration from Tab 2 (applied after transforms).
+    date_col : str | None
+        Name of the datetime column used for the last-12-months trim.
+    """
     task = _TASKS[task_id]
     rng  = np.random.default_rng(seed)
 
     media_set        = set(media_cols)
+    # Pre-compute whether the target column has any zero values for zero-mask sampling
     has_target_zeros = (
         bool((df[target_col] == 0).any()) if target_col in df.columns else False
     )
@@ -515,32 +816,34 @@ def _autofit_worker(
         constraints.get("allowed_models", list(_ALL_MODEL_TYPES))
     )
 
-    best_score  = -np.inf
+    best_score  = -np.inf       # Tracks the best normalised score seen
     best_config: dict | None = None
     start = time.time()
 
     try:
         for i in range(n_iter):
             # ── Cancel check ──────────────────────────────────────────────────
+            # The UI sets task["cancel"] = True when the user clicks "Cancel".
             if task.get("cancel"):
                 break
 
             try:
                 # ── Sample column subset ──────────────────────────────────────
                 # Non-media columns are randomly included (70 % chance each).
-                # All media channels are ALWAYS included — users expect every
-                # declared media variable to appear in every fitted model.
+                # Media columns are ALWAYS included — users expect every declared
+                # media channel to appear in every fitted model.
                 mask = rng.random(len(input_cols)) < 0.70
                 for _mi, _mc in enumerate(input_cols):
                     if _mc in media_set:
                         mask[_mi] = True      # media channels are mandatory
+                # Ensure at least one column is always included
                 if not mask.any():
                     mask[int(rng.integers(0, len(input_cols)))] = True
                 selected = [c for c, ok in zip(input_cols, mask) if ok]
 
                 # ── Sample transform chain per column ─────────────────────────
-                all_t: list[dict] = []
-                feats:  list[str] = []
+                all_t: list[dict] = []   # All transform dicts for this iteration
+                feats:  list[str] = []   # Final column names after transforms
                 for col in selected:
                     t_list, final = _sample_col_transforms(
                         col, col in media_set, has_target_zeros, rng
@@ -548,37 +851,43 @@ def _autofit_worker(
                     all_t.extend(t_list)
                     feats.append(final)
 
-                # Deduplicate feature names (preserve order)
+                # Deduplicate feature names (preserve order) — can happen when
+                # two columns share the same final name after in-place transforms
                 seen_f: set = set()
                 feats = [f for f in feats if not (f in seen_f or seen_f.add(f))]
 
                 # ── Apply transforms on a fresh copy ──────────────────────────
+                # Fresh copy for each iteration so transforms don't accumulate
                 dfc = df.copy()
                 if all_t:
                     dfc = apply_tab2_transformations(
                         dfc, all_t, groupby_cols, target_col
                     )
 
-                # Apply date filter (correct adstock carry-over already computed)
+                # Apply the date filter AFTER transforms so adstock carry-over
+                # from before the window boundary is correctly computed
                 if date_filter_cfg:
                     dfc = _apply_date_filter(dfc, date_filter_cfg)
 
                 # Trim to last 12 months before fitting
                 dfc = _last_n_months(dfc, date_col, n=12)
 
+                # Only keep feature columns that survived the transform pipeline
                 valid = [f for f in feats if f in dfc.columns]
                 if not valid:
                     continue
 
                 # ── Prepare X, y ──────────────────────────────────────────────
+                # Drop rows with any NaN in features or target
                 mdf = dfc[valid + [target_col]].dropna()
+                # Need at least k+1 rows to fit a model with k features
                 if len(mdf) < max(3, len(valid) + 1):
                     continue
 
                 X_arr = mdf[valid].values.astype(float)
                 y_arr = mdf[target_col].values.astype(float)
 
-                # Skip zero-variance columns
+                # Skip configurations with zero-variance features (can't be modelled)
                 if (X_arr.std(axis=0) == 0).any():
                     continue
 
@@ -593,6 +902,7 @@ def _autofit_worker(
                 model_type, params, metrics = triple
                 score = _to_score(metrics, metric)
 
+                # Update best config if this is the best score seen so far
                 if score > best_score:
                     best_score = score
                     raw_val    = metrics.get(metric, np.nan)
@@ -606,20 +916,25 @@ def _autofit_worker(
                         "metric_label":    METRIC_LABELS.get(metric, metric),
                         "iterations_run":  i + 1,
                     }
-                    task["best_config"] = best_config  # visible to UI immediately
+                    # Write to shared task dict immediately so UI can show live progress
+                    task["best_config"] = best_config
                     task["best_score"]  = raw_val
 
             except Exception:
-                pass
+                pass   # Swallow per-iteration errors to keep the search running
 
             # ── Update progress ────────────────────────────────────────────────
             elapsed = time.time() - start
             task["progress"] = (i + 1) / n_iter
             task["elapsed"]  = elapsed
+            # ETA: average time per iteration × remaining iterations
             task["eta"]      = (elapsed / max(i + 1, 1)) * (n_iter - i - 1)
             task["iter"]     = i + 1
 
         # ── Refit best config with full inference (including SHAP for trees) ───
+        # After the search loop, the best configuration is refit via fit_model()
+        # which computes full TreeSHAP values (for trees) or exact inference
+        # (for linear models).  This is what Tab 3 displays.
         if best_config and not task.get("cancel"):
             task["status"] = "refitting"
             try:
@@ -636,8 +951,8 @@ def _autofit_worker(
                 dfc = _last_n_months(dfc, date_col, n=12)
 
                 # ── Record the actual date window used for the final fit ──────
-                # This is propagated back to cfg["date_filter"] in the UI so
-                # Tab 2 shows the same 12-month subset the model was trained on.
+                # Propagated back to cfg["date_filter"] in the UI so that Tab 2's
+                # live preview shows the same 12-month subset the model was trained on.
                 if date_col and date_col in dfc.columns:
                     try:
                         _dt = pd.to_datetime(dfc[date_col]).dropna()
@@ -649,6 +964,7 @@ def _autofit_worker(
 
                 valid = best_config["best_features"]
                 mdf   = dfc[valid + [target_col]].dropna()
+                # Full inference refit using fit_model (includes TreeSHAP if applicable)
                 full_result = fit_model(
                     mdf[valid],
                     mdf[target_col],
@@ -662,9 +978,11 @@ def _autofit_worker(
         task["result"] = best_config
 
     except Exception as exc:
+        # Worker-level exception — store the error message for the UI to display
         task["error"] = str(exc)
 
     finally:
+        # Always update task status on exit so the UI knows the worker finished
         cancelled = task.get("cancel", False)
         task["status"] = (
             "cancelled" if cancelled
@@ -689,7 +1007,50 @@ def start_autofit(
     date_filter_cfg: dict | None = None,
     date_col: str | None         = None,
 ) -> None:
-    """Launch the auto-fit search in a background daemon thread."""
+    """Launch the Auto-Fit random search in a background daemon thread.
+
+    Registers a new task entry in ``_TASKS``, snapshots the input DataFrame,
+    and starts a daemon thread running ``_autofit_worker()``.
+
+    The caller is responsible for polling ``get_task(task_id)`` to check
+    progress and retrieve the result when ``task["done"]`` becomes True.
+    After processing the completed task the caller should call
+    ``cleanup_task(task_id)`` to free memory.
+
+    Parameters
+    ----------
+    task_id : str
+        Unique identifier for this task (UUID4 recommended).
+    df : pd.DataFrame
+        The Tab 1 processed DataFrame.  A snapshot copy is taken immediately
+        so subsequent UI changes do not affect the running search.
+    target_col : str
+        Name of the target (KPI) column.
+    input_cols : list[str]
+        All candidate feature columns (including media channels).
+    media_cols : list[str]
+        Subset of input_cols that should receive adstock / saturation.
+    groupby_cols : list[str]
+        Groupby columns for group-aware transforms.
+    constraints : dict
+        Search constraints with keys:
+          - ``positive_coefficients`` (bool) — enforce non-negative coefficients.
+          - ``positive_intercept``    (bool) — reject negative intercept configs.
+          - ``max_pval``              (float) — maximum allowed feature p-value.
+          - ``allowed_models``        (list[str]) — model types to include.
+    metric : str
+        Metric to optimise (default ``"adj_r2"``).  Must be a key in METRIC_LABELS.
+    n_iter : int
+        Number of random configurations to evaluate (default 200).
+    seed : int
+        Random seed for reproducibility (default 42).
+    date_filter_cfg : dict | None
+        Optional Tab 2 date filter to apply after transforms.
+    date_col : str | None
+        Name of the datetime column used for the 12-month trim.
+    """
+    # Initialise the task state dict before starting the thread so get_task()
+    # always returns a valid dict from the moment start_autofit() returns.
     _TASKS[task_id] = {
         "status":      "running",
         "progress":    0.0,
@@ -706,20 +1067,20 @@ def start_autofit(
     thread = threading.Thread(
         target=_autofit_worker,
         kwargs=dict(
-            task_id        = task_id,
-            df             = df.copy(),   # snapshot so UI changes don't interfere
-            target_col     = target_col,
-            input_cols     = list(input_cols),
-            media_cols     = list(media_cols),
-            groupby_cols   = list(groupby_cols),
-            constraints    = dict(constraints),
-            metric         = metric,
-            n_iter         = n_iter,
-            seed           = seed,
-            date_filter_cfg= date_filter_cfg,
-            date_col       = date_col,
+            task_id         = task_id,
+            df              = df.copy(),   # Snapshot so UI changes don't interfere
+            target_col      = target_col,
+            input_cols      = list(input_cols),
+            media_cols      = list(media_cols),
+            groupby_cols    = list(groupby_cols),
+            constraints     = dict(constraints),
+            metric          = metric,
+            n_iter          = n_iter,
+            seed            = seed,
+            date_filter_cfg = date_filter_cfg,
+            date_col        = date_col,
         ),
-        daemon=True,
+        daemon=True,   # Daemon so thread dies when the Streamlit server exits
     )
     thread.start()
 
@@ -727,15 +1088,35 @@ def start_autofit(
 # ─────────────────────────────── DISPLAY HELPER ───────────────────────────────
 
 def describe_transforms(transforms: list[dict]) -> pd.DataFrame:
-    """Return a display DataFrame describing a flat transform list."""
+    """Convert a flat transform list into a human-readable display DataFrame.
+
+    Used in Tab 2's Auto-Fit result section and Tab 3's "Applied Transformations"
+    expander to give users a clear, tabular summary of which transforms are active.
+
+    Parameters
+    ----------
+    transforms : list[dict]
+        Flat list of transform dicts (same schema as stored in
+        cfg["adstock_transforms"]).
+
+    Returns
+    -------
+    pd.DataFrame
+        Columns: ``#`` (step number), ``Source``, ``Transform``, ``Output``,
+        ``Parameters``.  Empty DataFrame with headers if transforms is empty.
+        The ``Output`` column appends " ↩" for in-place transforms (no new column)
+        to distinguish them from new-column transforms.
+    """
     rows = []
     for i, t in enumerate(transforms):
         src   = t.get("source_col", "")
         ttype = t.get("type", "")
         out   = t.get("output_col", "")
         p     = t.get("params", {})
+        # In-place transforms don't create a new column
         inplace = ttype not in {"adstock", "norm", "saturation"}
 
+        # Build a human-readable parameter summary for each transform type
         if ttype == "adstock":
             m  = p.get("method", "geometric")
             ml = p.get("max_lag", 4)
@@ -756,7 +1137,7 @@ def describe_transforms(transforms: list[dict]) -> pd.DataFrame:
         elif ttype == "moving_avg":
             ps = f"window={p.get('n', 3)}"
         elif ttype == "mean_center":
-            ps = "—"
+            ps = "—"   # No parameters needed
         elif ttype == "zero_mask":
             ps = "where target = 0"
         else:
@@ -766,6 +1147,7 @@ def describe_transforms(transforms: list[dict]) -> pd.DataFrame:
             "#":          i + 1,
             "Source":     src,
             "Transform":  ttype.replace("_", " ").title(),
+            # Append ↩ to the output name for in-place transforms as a visual cue
             "Output":     out + (" ↩" if inplace else ""),
             "Parameters": ps,
         })

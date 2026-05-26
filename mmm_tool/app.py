@@ -1,4 +1,53 @@
-"""MMM Tool — Streamlit web application."""
+"""MMM Tool — Streamlit web application (main entry point).
+
+This file implements a three-tab Streamlit application for Marketing Mix
+Modelling (MMM).  Each tab corresponds to a distinct workflow stage:
+
+  Tab 0 — Data Preprocessing
+    Upload a CSV/XLSX file and configure an ordered transformation pipeline:
+    datetime conversion → pivot → calculated columns → normalisation → sort.
+    Choose input columns (features) and the target (KPI) column.
+    Displays live scatter / bar / line charts of each input vs. the target.
+
+  Tab 1 — Adstock & Saturation
+    Declare which input columns are paid media channels.
+    Manually build a transform chain (adstock, saturation, normalisation,
+    lag, lead, moving average, mean centering, zero mask) that is applied
+    on top of Tab 0's pipeline.
+    Run the **Auto-Fit** random search to automatically discover the best
+    transform + model configuration (dispatched to a daemon background thread
+    via utils.autofit).
+    Configure a date filter applied after transforms to restrict the
+    modelling window.
+
+  Tab 2 — Prior Modeling
+    Fit a linear or tree-based regression model on the fully processed data.
+    Supported models: OLS, Ridge, Lasso, ElasticNet, Random Forest, XGBoost.
+    Displays a coefficient / SHAP table with p-values, model-fit statistics
+    (R², adj-R², RMSE, MAE, AIC, BIC, F-stat), and an impactable
+    decomposition table that allocates total KPI to each channel.
+
+Session state schema
+--------------------
+All user configuration is stored in ``st.session_state`` which persists
+across Streamlit reruns:
+
+  df_original      : pd.DataFrame | None  — raw uploaded data
+  uploaded_filename: str | None           — filename for display
+  current_tab      : int                  — 0, 1, or 2 (active tab index)
+  widget_epoch     : int                  — incremented on file reload to force
+                                           widget key changes and avoid stale values
+  config           : dict                 — full pipeline configuration (see
+                                           _default_config() for schema)
+
+Data flow
+---------
+  df_original
+    → apply_all_transformations()     [utils.preprocessing]   → Tab 0 df
+    → apply_tab2_transformations()    [utils.adstock]          → Tab 1 df (+ transforms)
+    → date filter                                              → get_processed_df() result
+    → fit_model()                     [utils.modelling]        → Tab 2 result
+"""
 import sys, os
 sys.path.insert(0, os.path.dirname(__file__))
 
@@ -357,6 +406,24 @@ MAX_TAB = len(TABS) - 1
 # ──────────────────────────── SESSION STATE ──────────────────────────────────
 
 def _default_config() -> dict:
+    """Return the canonical empty configuration dict for a fresh dataset.
+
+    Called whenever a new file is uploaded (to reset everything) and used as
+    the initial session state value on first load.
+
+    The config dict is the single source of truth for the entire pipeline:
+      - Tab 0 reads/writes: datetime_columns, groupby_columns, pivot,
+        calculated_columns, normalizations, sort_config, input_columns,
+        target_column.
+      - Tab 1 reads/writes: media_channels, date_filter, adstock_transforms,
+        autofit.
+      - Tab 2 reads/writes: model_config.
+
+    Returns
+    -------
+    dict
+        Fully-initialised configuration dict with empty/default values.
+    """
     return {
         "datetime_columns": [],
         "groupby_columns": [],
@@ -385,6 +452,9 @@ def _default_config() -> dict:
         },
     }
 
+# Initialise session state keys that don't already exist.
+# Streamlit reruns the entire script on every user interaction; this block
+# ensures the state dict is only set once (on first load or after a hard reset).
 for _k, _v in [
     ("current_tab", 0),
     ("df_original", None),
@@ -398,11 +468,41 @@ for _k, _v in [
 # ─────────────────────────────── HELPERS ─────────────────────────────────────
 
 def wk(base: str) -> str:
+    """Generate a widget key that is unique to the current file/epoch.
+
+    Streamlit caches widget state by key.  When the user uploads a new file
+    we increment ``widget_epoch`` so all widget keys change, forcing a reset
+    of every selectbox, multiselect, slider, etc. to their new default values.
+
+    Parameters
+    ----------
+    base : str
+        Logical widget name (e.g. ``"dt_cols"``).  Must be unique within a
+        single render pass.
+
+    Returns
+    -------
+    str
+        Key string of the form ``"{base}_e{epoch}"``.
+    """
     return f"{base}_e{st.session_state.widget_epoch}"
 
 
 def _get_tab1_df() -> pd.DataFrame | None:
-    """Tab 1 processed data (no date filter, no Tab 2 transforms)."""
+    """Return the Tab 0 (Data Preprocessing) processed DataFrame.
+
+    Applies the full Tab 0 transformation pipeline (datetime conversion,
+    pivot, calculated columns, normalisation, sort) to the raw uploaded data.
+    The result is used as:
+      - The live preview in Tab 0's right panel.
+      - The source DataFrame for Tab 1's transform chain (no date filter).
+      - The input to get_processed_df().
+
+    Returns
+    -------
+    pd.DataFrame | None
+        Processed DataFrame, or None if no file has been uploaded yet.
+    """
     if st.session_state.df_original is None:
         return None
     return apply_all_transformations(
@@ -412,7 +512,23 @@ def _get_tab1_df() -> pd.DataFrame | None:
 
 
 def get_processed_df() -> pd.DataFrame | None:
-    """Full pipeline: Tab 1 → Tab 2 transforms → date filter."""
+    """Return the fully processed DataFrame for Tab 1 and Tab 2 use.
+
+    Executes the complete pipeline:
+      1. Tab 0 preprocessing  (apply_all_transformations)
+      2. Tab 1 adstock/saturation transforms on the FULL date range, so that
+         carry-over is computed correctly even when a date filter is active.
+      3. Date filter (applied last, after transforms).
+
+    This is the DataFrame shown in Tab 1's live preview and used by Tab 2's
+    model-fitting code.  It is also available for download via the nav bar.
+
+    Returns
+    -------
+    pd.DataFrame | None
+        Fully processed and date-filtered DataFrame, or None if no data is
+        loaded.
+    """
     df = _get_tab1_df()
     if df is None:
         return None
@@ -457,6 +573,20 @@ def _expander_done(is_done: bool) -> None:
 
 
 def _download_buttons(df: pd.DataFrame, prefix: str) -> None:
+    """Render CSV and XLSX download buttons for the processed DataFrame.
+
+    Shows two download buttons side by side.  The ``prefix`` is appended to
+    the Streamlit widget keys to avoid duplicate-key errors when this function
+    is called from multiple places on the same page (top nav bar, right panel).
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        DataFrame to serialise and offer for download.  If None or empty,
+        the function returns without rendering anything.
+    prefix : str
+        Unique string to differentiate widget keys across call sites.
+    """
     if df is None or df.empty:
         return
     c1, c2 = st.columns(2)
@@ -478,6 +608,21 @@ def _download_buttons(df: pd.DataFrame, prefix: str) -> None:
 # ─────────────────────────────── NAV BAR ─────────────────────────────────────
 
 def nav_bar(position: str) -> None:
+    """Render the navigation bar with Prev / Next buttons, tab indicators, and download links.
+
+    Called twice per page render — once at the top (position="top") and once
+    at the bottom (position="bottom") — so users can navigate without scrolling.
+    Each call uses ``position`` to namespace widget keys and avoid duplicates.
+
+    Layout (left → right):
+      [◀ Prev] [Next ▶]  [Tab 0 | Tab 1 | Tab 2]  [⬇ CSV  ⬇ XLSX]
+
+    Parameters
+    ----------
+    position : str
+        Identifies the bar's location in the page.  Must be unique per render
+        call (e.g. ``"top"`` or ``"bottom"``).
+    """
     idx = st.session_state.current_tab
     c_prev, c_next, c_tabs, c_dl = st.columns([1, 1, 5, 2])
 
@@ -490,6 +635,7 @@ def nav_bar(position: str) -> None:
             st.session_state.current_tab += 1
             st.rerun()
     with c_tabs:
+        # Build the tab indicator row: active tab is highlighted with a pill badge
         parts = []
         for i, t in enumerate(TABS):
             if i == idx:
@@ -501,6 +647,7 @@ def nav_bar(position: str) -> None:
             unsafe_allow_html=True,
         )
     with c_dl:
+        # Show download buttons only when processed data is available
         df = get_processed_df()
         if df is not None:
             _download_buttons(df, f"{position}_{idx}")
@@ -510,6 +657,32 @@ def nav_bar(position: str) -> None:
 # ════════════════════════════════════════════════════════════════════════════
 
 def tab_preprocessing() -> None:
+    """Render Tab 0 — Data Preprocessing.
+
+    This function is the sole renderer for Tab 0.  It is called on every
+    Streamlit rerun when ``st.session_state.current_tab == 0``.
+
+    The tab is split into two panels:
+      Left  — numbered configuration expanders (① – ⑧).
+      Right — live data preview (first 200 rows of the current processed df).
+
+    Below both panels, Input ↔ Target Charts are rendered full-width when
+    both input columns and a target column have been selected.
+
+    UI Expanders (left panel)
+    -------------------------
+    ① Upload Dataset        — file uploader; resets config on new file.
+    ② Convert to Datetime   — multiselect for datetime columns.
+    ③ Grouping Columns      — multiselect for group-by keys.
+    ④ Pivot Dataset         — optional long → wide pivot.
+    ⑤ Calculated Columns   — add derived columns (lag, lead, sum, product).
+    ⑥ Normalise Columns    — in-place normalisation rules.
+    ⑦ Sort Data             — multi-key sort configuration.
+    ⑧ Input & Target Columns — select feature and target columns.
+
+    All config changes are written back to ``st.session_state.config`` and
+    trigger an ``st.rerun()`` so the live preview updates immediately.
+    """
     st.title("Data Preprocessing")
     cfg = st.session_state.config
 
@@ -530,7 +703,9 @@ def tab_preprocessing() -> None:
                     )
                     st.session_state.df_original = raw
                     st.session_state.uploaded_filename = uploaded.name
+                    # Reset all config when a new file is uploaded
                     st.session_state.config = _default_config()
+                    # Increment epoch to force all widget keys to change (avoid stale state)
                     st.session_state.widget_epoch += 1
                     st.success(f"Loaded **{uploaded.name}** — {len(raw):,} rows × {len(raw.columns)} cols")
                     st.rerun()
@@ -546,10 +721,12 @@ def tab_preprocessing() -> None:
         raw_cols = list(st.session_state.df_original.columns)
 
         def cur_cols_now():
+            """Return current column list after applying the Tab 0 pipeline."""
             df = _get_tab1_df()
             return list(df.columns) if df is not None else raw_cols
 
         def cur_df_now():
+            """Return the current Tab 0 processed DataFrame (for dtype checks)."""
             return _get_tab1_df()
 
         # ── ② Datetime ───────────────────────────────────────────────────────
@@ -907,6 +1084,44 @@ def _t2_describe(t: dict) -> str:
 
 
 def tab_adstock() -> None:
+    """Render Tab 1 — Adstock & Saturation.
+
+    This function is the sole renderer for Tab 1 and is called on every
+    Streamlit rerun when ``st.session_state.current_tab == 1``.
+
+    The tab is split into two panels:
+      Left  — numbered configuration expanders (①–④).
+      Right — live preview of the fully processed DataFrame (Tab 0 + Tab 1
+               transforms + date filter).
+
+    UI Expanders (left panel)
+    -------------------------
+    ① Media Channels      — declare which input columns are paid media (adstock
+                            and saturation transforms are restricted to these).
+    ② Auto-Fit            — run a random search over transform + model configs;
+                            launches a daemon background thread via
+                            utils.autofit.start_autofit().  Polls
+                            utils.autofit.get_task() on every rerun until done.
+    ③ Manual Transforms   — build the transform chain manually (adstock,
+                            saturation, normalisation, lag, lead, moving average,
+                            mean centering, zero mask).  The chain is stored in
+                            cfg["adstock_transforms"] and executed in order by
+                            utils.adstock.apply_tab2_transformations().
+    ④ Date Filter         — restrict the analysis window after transforms.
+                            Stored in cfg["date_filter"] and applied by
+                            get_processed_df().
+
+    Auto-Fit workflow
+    -----------------
+    1. User configures search constraints (metric, iterations, p-value cap,
+       model whitelist, positivity flags) and clicks "Start Auto-Fit".
+    2. start_autofit() is called; a task ID is stored in the session state.
+    3. On every Streamlit rerun the Auto-Fit section polls get_task() to
+       check progress and re-display a live progress bar.
+    4. On completion (or cancellation) the result is read from the task dict,
+       written to cfg["autofit"]["result"], and the background transforms +
+       model type are applied to cfg so Tab 2 reflects the Auto-Fit outcome.
+    """
     st.title("Adstock & Saturation")
 
     cfg = st.session_state.config
@@ -1958,12 +2173,61 @@ def _fmt_pval(v) -> str:
 
 
 def _fmt_float(v, digits: int = 6) -> str:
+    """Format a float for display in the model statistics tables.
+
+    Parameters
+    ----------
+    v : float | None
+        Value to format.  Returns '—' for None and NaN.
+    digits : int
+        Number of decimal places (default 6).
+
+    Returns
+    -------
+    str
+        Formatted string, e.g. ``"0.943821"`` or ``"—"``.
+    """
     if v is None or (isinstance(v, float) and np.isnan(v)):
         return "—"
     return f"{v:.{digits}f}"
 
 
 def tab_modelling() -> None:
+    """Render Tab 2 — Prior Modeling.
+
+    This function is the sole renderer for Tab 2 and is called on every
+    Streamlit rerun when ``st.session_state.current_tab == 2``.
+
+    The tab is split into two panels:
+      Left  — numbered configuration expanders (①–②).
+      Right — live model results.
+
+    UI Expanders (left panel)
+    -------------------------
+    ① Feature Selection    — multiselect from Tab 0 input channels and new
+                            columns created by Tab 1 transforms.  Tab 0 base
+                            columns and Tab 1 derived columns are tagged with
+                            different CSS pill styles.
+    ② Model & Hyperparameters — choose model type and tune hyperparameters:
+      - Linear Regression  — plain OLS (fit_intercept, positive).
+      - Ridge / Lasso / ElasticNet — regularised linear (alpha, l1_ratio).
+      - Random Forest / XGBoost   — tree ensembles with SHAP inference.
+
+    Right panel
+    -----------
+    Applied Transformations (from Tab 1) are shown at the top full-width.
+
+    Model Results (right):
+      - P-value method badge (inference method note).
+      - Coefficient table (or SHAP table for tree models).
+      - Model statistics: R², Adj. R², RMSE, MAE, AIC, BIC, F-stat, n obs.
+      - Impactable Decomposition: proportion of total KPI attributable to each
+        channel, computed by _build_impactable_df().
+
+    The model is refit on every Streamlit rerun whenever the feature selection
+    or hyperparameters change (fit_model() is cheap for linear models; tree
+    models may take a second or two for large datasets).
+    """
     st.title("Prior Modeling")
 
     cfg = st.session_state.config
