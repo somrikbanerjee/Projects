@@ -8,14 +8,14 @@ Fixed-expense deduction order
 3. Home floor  : Home allocation ≥ rent_amount (₹38,500 by default, configurable)
 
 The remainder after (1) and (2) is split among the 9 remaining categories
-(all except 'investment' and 'emi') using Ridge regression blended with
+(all except 'investment' and 'emi') using Random Forest regression blended with
 Hyderabad base allocations.  'home' has a minimum floor = rent_amount.
 
 Model schedule
 --------------
   0 months   → 100 % Hyderabad base
   1–2 months → blend: (1-α)·base + α·rolling avg,  α = n/3
-  3+ months  → Ridge regression (ML weight caps at 0.85)
+  3+ months  → Random Forest regression (ML weight caps at 0.85)
 """
 
 import math
@@ -234,9 +234,7 @@ def _feats(month, year, total_budget, offset):
 
 
 def _train(cat: str, hist_ml: list):
-    from sklearn.linear_model import Ridge
-    from sklearn.pipeline import Pipeline
-    from sklearn.preprocessing import PolynomialFeatures, StandardScaler
+    from sklearn.ensemble import RandomForestRegressor
 
     base_abs = hist_ml[0]['year'] * 12 + hist_ml[0]['month']
     X, y = [], []
@@ -248,14 +246,14 @@ def _train(cat: str, hist_ml: list):
         X.append(fs)
         y.append(rec['ml_pcts'].get(cat, 0.0))
 
-    pipe = Pipeline([
-        ('poly',   PolynomialFeatures(degree=1, include_bias=False)),
-        ('scaler', __import__('sklearn.preprocessing',
-                               fromlist=['StandardScaler']).StandardScaler()),
-        ('ridge',  Ridge(alpha=10.0)),
-    ])
-    pipe.fit(np.array(X, float), np.array(y, float))
-    return pipe
+    model = RandomForestRegressor(
+        n_estimators=100,
+        max_depth=4,
+        min_samples_leaf=1,
+        random_state=42,
+    )
+    model.fit(np.array(X, float), np.array(y, float))
+    return model
 
 
 # ── Main prediction ───────────────────────────────────────────────────────────

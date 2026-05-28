@@ -1,10 +1,10 @@
 # BudgetIQ
 
-A personal budgeting web application tailored for Hyderabad, India. Enter your monthly salary, and BudgetIQ uses a machine-learning model (Ridge regression blended with Hyderabad cost-of-living baselines) to suggest how to split it across 12 spending categories. Fixed expenses — rent, loan EMI, and investment — are deducted first; the remainder is split intelligently across everything else.
+A personal budgeting web application tailored for Hyderabad, India. Enter your monthly salary, and BudgetIQ uses a machine-learning model (Random Forest regression blended with Hyderabad cost-of-living baselines) to suggest how to split it across 12 spending categories. Fixed expenses — rent, loan EMI, and investment — are deducted first; the remainder is split intelligently across everything else.
 
 ## Features
 
-- **AI-suggested splits** — base Hyderabad allocations for the first month, blending in your personal history as months accumulate, switching to full Ridge regression at 3+ months
+- **AI-suggested splits** — base Hyderabad allocations for the first month, blending in your personal history as months accumulate, switching to full Random Forest regression at 3+ months
 - **Fixed-expense deductions** — investment (auto-escalating 10 % each April), loan EMI (active until a configurable end date), and a rent floor that guarantees your home allocation never drops below your rent amount
 - **Seasonal adjustments** — spending weights shift automatically for festive months (Diwali, New Year, summer travel, etc.)
 - **Live cost data** — CPI inflation and petrol prices are fetched each time you request a new prediction; the results are shown as a Live Cost Data card on the dashboard
@@ -32,7 +32,7 @@ budgeting_tool/
 ├── budget/
 │   ├── models.py          # AppSettings, MonthlyBudget, BudgetSplit, CostSnapshot
 │   ├── views.py           # Dashboard, set-budget (2-step), history, settings, API
-│   ├── ml_engine.py       # Prediction engine — base allocations, Ridge regression, seasonal logic
+│   ├── ml_engine.py       # Prediction engine — base allocations, Random Forest regression, seasonal logic
 │   ├── cost_data.py       # Live cost-data fetch (World Bank CPI, petrol estimate, Numbeo indices)
 │   ├── forms.py           # BudgetInputForm, SplitAdjustmentForm, AppSettingsForm
 │   ├── urls.py            # URL routing
@@ -121,7 +121,7 @@ The server runs with `--noreload` to prevent Django's file-watcher from polling 
 |---|---|
 | 0 months | Hyderabad base allocations (adjusted for season and live cost data) |
 | 1–2 months | Blend: `(1 − α) × base + α × rolling average`, where `α = n / 3` |
-| 3+ months | Ridge regression on the 10 ML categories, blended with base at `min(n/12, 0.85)` weight |
+| 3+ months | Random Forest regression on the 10 ML categories, blended with base at `min(n/12, 0.85)` weight |
 
 Investment and loan EMI are **fixed amounts** (not predicted); they are deducted before any split is computed. The home category has a **rent floor** — it will never be allocated less than your configured rent amount.
 

@@ -9,6 +9,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.8.0] — 2026-05-28
+
+### Changed
+- **ML model upgraded from Ridge to Random Forest** — `_train` in `ml_engine.py` now uses `sklearn.ensemble.RandomForestRegressor` (`n_estimators=100`, `max_depth=4`, `random_state=42`) instead of a `Ridge + PolynomialFeatures + StandardScaler` pipeline. Random Forest captures non-linear patterns in spending behaviour (e.g. festive-season spikes, budget-level thresholds) that Ridge could not model. The `PolynomialFeatures` and `StandardScaler` pre-processing steps are removed as tree-based models are scale- and polynomial-invariant. The existing base-blend weighting (`min(n/12, 0.85)`), lag features, and rent-floor logic are unchanged.
+
+---
+
 ## [0.7.0] — 2026-05-28
 
 ### Added
@@ -97,7 +104,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **ML prediction engine** (`ml_engine.py`):
   - 0 months of history → Hyderabad base allocations.
   - 1–2 months → blended rolling average weighted by `α = n / 3`.
-  - 3+ months → per-category Ridge regression (scikit-learn) with polynomial features, standard scaling, seasonal lag features, and a base-blend cap of 0.85.
+  - 3+ months → per-category Ridge regression (scikit-learn) with polynomial features, standard scaling, seasonal lag features, and a base-blend cap of 0.85. *(Upgraded to Random Forest in v0.8.0.)*
 - **Seasonal multipliers** for months 1, 3, 4, 7, 8, 10, 11, 12 covering shopping, travel, entertainment, food, and groceries.
 - **Live cost data** (`cost_data.py`) — fetches India CPI and inflation from the World Bank API, estimates Hyderabad petrol price, and computes Numbeo-style rent/groceries/restaurant indices. Results cached in the `CostSnapshot` model for the month.
 - **`CostSnapshot` model** — stores per-month cost indicators; used to adjust base category weights via `cost_snapshot_to_adjustments`.

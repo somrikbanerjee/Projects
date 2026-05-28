@@ -103,7 +103,8 @@
       "Bash(ps -p 20333 -p 23217 -p 23260 -o pid,command)",
       "Bash(kill 23217)",
       "Bash(launchctl kickstart *)",
-      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://127.0.0.1:8080/)"
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://127.0.0.1:8080/)",
+      "Bash(python3 -c \"from sklearn.ensemble import RandomForestRegressor; print\\('OK'\\)\")"
     ],
     "additionalDirectories": [
       "/Users/somrikbanerjee/Library/LaunchAgents"
