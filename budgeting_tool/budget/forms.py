@@ -1,5 +1,6 @@
 from django import forms
 from .models import CATEGORIES, AppSettings
+from .cost_data import SUPPORTED_CITIES
 
 
 class BudgetInputForm(forms.Form):
@@ -59,9 +60,15 @@ class SplitAdjustmentForm(forms.Form):
 
 
 class AppSettingsForm(forms.ModelForm):
+    location = forms.ChoiceField(
+        choices=[(c, c) for c in SUPPORTED_CITIES],
+        widget=forms.Select(attrs={'class': 'form-select'}),
+        label='City / Location',
+    )
+
     class Meta:
         model = AppSettings
-        fields = ['rent_amount', 'emi_amount', 'emi_end_year', 'emi_end_month']
+        fields = ['rent_amount', 'emi_amount', 'emi_end_year', 'emi_end_month', 'location']
         widgets = {
             'rent_amount': forms.NumberInput(attrs={
                 'class': 'form-control', 'step': '0.01',

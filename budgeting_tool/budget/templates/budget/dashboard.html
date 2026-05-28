@@ -9,7 +9,7 @@
     <h4 class="mb-0 fw-bold">
       <i class="bi bi-bar-chart-fill text-fin me-2"></i>{{ month_name }} {{ year }}
     </h4>
-    <div class="text-muted" style="font-size:.82rem;">Hyderabad Budget Intelligence</div>
+    <div class="text-muted" style="font-size:.82rem;">{{ location }} Budget Intelligence</div>
   </div>
   <div class="col-auto d-flex gap-2">
     <a href="{% url 'set_budget_month' year month %}" class="btn btn-gold">
@@ -128,6 +128,9 @@
     <div class="card" style="flex:0 0 auto;">
       <div class="card-header d-flex align-items-center gap-2">
         <i class="bi bi-cloud-check text-fin"></i> Live Cost Data
+        <span class="ms-auto" style="font-size:.75rem;color:var(--fin-muted);">
+          <i class="bi bi-geo-alt me-1"></i>{{ location }}
+        </span>
       </div>
       <div class="card-body p-3" style="font-size:.82rem;">
         {% if cost_snapshot.india_inflation_pct %}
@@ -138,7 +141,7 @@
         {% endif %}
         {% if cost_snapshot.petrol_price_hyd %}
         <div class="d-flex justify-content-between py-1 border-bottom" style="border-color:var(--fin-border)!important;">
-          <span style="color:var(--fin-muted);">Petrol Price (HYD est.)</span>
+          <span style="color:var(--fin-muted);">Petrol Price ({{ location }} est.)</span>
           <span class="text-fin fw-semibold">₹{{ cost_snapshot.petrol_price_hyd|floatformat:1 }}/L</span>
         </div>
         {% endif %}
@@ -172,7 +175,7 @@
   <div class="card-body">
     <i class="bi bi-wallet2" style="font-size:3rem;color:var(--fin-gold);"></i>
     <h5 class="mt-3 mb-1">No budget set for {{ month_name }} {{ year }}</h5>
-    <p class="text-muted mb-3">Let the AI suggest an optimal split based on your budget and Hyderabad living costs.</p>
+    <p class="text-muted mb-3">Let the AI suggest an optimal split based on your budget and {{ location }} living costs.</p>
     <a href="{% url 'set_budget' %}" class="btn btn-gold px-4">
       <i class="bi bi-plus-lg me-1"></i>Set This Month's Budget
     </a>

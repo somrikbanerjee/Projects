@@ -11,7 +11,7 @@ from django.contrib import messages
 from .models import MonthlyBudget, BudgetSplit, AppSettings, CATEGORIES, CATEGORY_ICONS
 from .forms import BudgetInputForm, SplitAdjustmentForm, AppSettingsForm
 from .ml_engine import get_prediction_for_month, pct_to_amounts, CATEGORIES as CATEGORY_KEYS
-from .cost_data import get_or_fetch_cost_snapshot
+from .cost_data import get_or_fetch_cost_snapshot, resolve_city_from_coords, SUPPORTED_CITIES
 
 
 def _now_india():
@@ -64,7 +64,7 @@ def dashboard(request):
         }
 
     settings = AppSettings.get()
-    cost_snapshot = get_or_fetch_cost_snapshot(year, month)
+    cost_snapshot = get_or_fetch_cost_snapshot(year, month, city=settings.location)
 
     living_budget = investment_amt = emi_amt = None
     if current_budget:
@@ -87,6 +87,7 @@ def dashboard(request):
         'category_icons': CATEGORY_ICONS,
         'categories': CATEGORIES,
         'settings': settings,
+        'location': settings.location,
         'cost_snapshot': cost_snapshot,
         'living_budget': living_budget,
         'investment_amt': investment_amt,
@@ -256,8 +257,10 @@ def app_settings(request):
     return render(request, 'budget/settings.html', {
         'form': form,
         'settings': settings,
+        'location': settings.location,
         'inv_amt': inv_amt,
         'inv_thresh': inv_thresh,
+        'supported_cities': SUPPORTED_CITIES,
     })
 
 
@@ -300,6 +303,23 @@ def delete_budget(request, year, month):
         next_url = request.POST.get('next') or request.GET.get('next')
         return redirect(next_url if next_url in ('dashboard', 'history') else 'history')
     return redirect('history')
+
+
+# ── Detect Location ───────────────────────────────────────────────────────────
+
+def api_detect_location(request):
+    """
+    Accepts lat/lon query params, reverse-geocodes via Nominatim, and returns
+    the best-matching supported city name.
+    """
+    try:
+        lat = float(request.GET.get('lat', ''))
+        lon = float(request.GET.get('lon', ''))
+    except (TypeError, ValueError):
+        return JsonResponse({'error': 'lat and lon are required'}, status=400)
+
+    city = resolve_city_from_coords(lat, lon)
+    return JsonResponse({'city': city, 'supported_cities': SUPPORTED_CITIES})
 
 
 # ── helpers ───────────────────────────────────────────────────────────────────

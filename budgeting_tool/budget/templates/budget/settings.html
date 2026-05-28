@@ -1,6 +1,6 @@
 {% extends "budget/base.html" %}
 {% load budget_filters %}
-{% block title %}Settings — BudgetIQ{% endblock %}
+{% block title %}Settings — BudgetIQ ({{ settings.location }}){% endblock %}
 
 {% block content %}
 <div class="row g-3 mb-3 align-items-center">
@@ -8,7 +8,7 @@
     <h4 class="mb-0 fw-bold">
       <i class="bi bi-gear text-fin me-2"></i>Fixed Expense Settings
     </h4>
-    <div class="text-muted" style="font-size:.82rem;">Configure rent and loan EMI defaults</div>
+    <div class="text-muted" style="font-size:.82rem;">Configure location, rent, and loan EMI defaults</div>
   </div>
   <div class="col-auto">
     <a href="{% url 'dashboard' %}" class="btn btn-fin-outline btn-sm">
@@ -42,6 +42,30 @@
 
         <form method="post">
           {% csrf_token %}
+
+          <!-- ── Location picker ───────────────────────────── -->
+          <div class="mb-3 p-3 rounded" style="background:rgba(0,200,150,.06);border:1px solid rgba(0,200,150,.18);">
+            <div class="fw-semibold mb-2" style="font-size:.9rem;color:var(--fin-primary);">
+              <i class="bi bi-geo-alt me-1"></i>Current Location
+            </div>
+            <div class="d-flex align-items-center gap-2 mb-2">
+              <i class="bi bi-pin-map text-fin" style="font-size:1.1rem;flex-shrink:0;"></i>
+              <span class="fw-semibold" style="color:var(--fin-text);">{{ settings.location }}</span>
+              <span class="ms-auto" style="font-size:.75rem;color:var(--fin-muted);">cost data calibrated for this city</span>
+            </div>
+            <label class="form-label" style="font-size:.82rem;">{{ form.location.label }}</label>
+            {{ form.location }}
+            <div class="form-text text-muted mt-2" style="font-size:.78rem;">
+              Or use your device's location:
+              <button type="button" id="detectLocationBtn" class="btn btn-sm ms-1"
+                      style="background:rgba(0,200,150,.12);border:1px solid rgba(0,200,150,.3);color:var(--fin-primary);font-size:.75rem;padding:.2rem .6rem;border-radius:6px;">
+                <i class="bi bi-crosshair me-1"></i>Detect My Location
+              </button>
+              <span id="locationStatus" class="ms-2" style="font-size:.75rem;"></span>
+            </div>
+          </div>
+
+          <hr/>
 
           <div class="mb-3">
             <label class="form-label fw-semibold">{{ form.rent_amount.label }}</label>
@@ -98,4 +122,54 @@
     </div>
   </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.getElementById('detectLocationBtn').addEventListener('click', function () {
+  const btn    = this;
+  const status = document.getElementById('locationStatus');
+  const select = document.getElementById('{{ form.location.auto_id }}');
+
+  if (!navigator.geolocation) {
+    status.textContent = 'Geolocation not supported by this browser.';
+    status.style.color = 'var(--fin-danger)';
+    return;
+  }
+
+  btn.disabled = true;
+  status.style.color = 'var(--fin-muted)';
+  status.textContent = 'Detecting…';
+
+  navigator.geolocation.getCurrentPosition(
+    function (pos) {
+      const lat = pos.coords.latitude;
+      const lon = pos.coords.longitude;
+      fetch(`{% url 'api_detect_location' %}?lat=${lat}&lon=${lon}`)
+        .then(r => r.json())
+        .then(data => {
+          if (data.city) {
+            select.value = data.city;
+            status.textContent = `Detected: ${data.city}`;
+            status.style.color = 'var(--fin-primary)';
+          } else {
+            status.textContent = 'Could not detect city.';
+            status.style.color = 'var(--fin-danger)';
+          }
+          btn.disabled = false;
+        })
+        .catch(() => {
+          status.textContent = 'Detection failed.';
+          status.style.color = 'var(--fin-danger)';
+          btn.disabled = false;
+        });
+    },
+    function () {
+      status.textContent = 'Location access denied.';
+      status.style.color = 'var(--fin-danger)';
+      btn.disabled = false;
+    }
+  );
+});
+</script>
 {% endblock %}

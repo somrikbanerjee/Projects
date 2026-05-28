@@ -391,9 +391,11 @@ def load_history_from_db(before_year: int, before_month: int) -> list:
 def get_prediction_for_month(total_budget: float, year: int, month: int,
                              force_refresh: bool = False) -> dict:
     from budget.cost_data import get_or_fetch_cost_snapshot, cost_snapshot_to_adjustments
+    settings = _get_settings()
+    city = settings.location
     history = load_history_from_db(year, month)
-    snap    = get_or_fetch_cost_snapshot(year, month, force=force_refresh)
-    adj     = cost_snapshot_to_adjustments(snap)
+    snap    = get_or_fetch_cost_snapshot(year, month, city=city, force=force_refresh)
+    adj     = cost_snapshot_to_adjustments(snap, city=city)
     pcts    = predict_split(total_budget, year, month, history, adj)
     amounts = pct_to_amounts(pcts, total_budget, year, month)
     settings = _get_settings()

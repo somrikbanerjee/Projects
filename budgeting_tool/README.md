@@ -1,16 +1,20 @@
 # BudgetIQ
 
-A personal budgeting web application tailored for Hyderabad, India. Enter your monthly salary, and BudgetIQ uses a machine-learning model (Random Forest regression blended with Hyderabad cost-of-living baselines) to suggest how to split it across 12 spending categories. Fixed expenses — rent, loan EMI, and investment — are deducted first; the remainder is split intelligently across everything else.
+A personal budgeting web application for Indian cities. Enter your monthly salary, and BudgetIQ uses a machine-learning model (Random Forest regression blended with city-specific cost-of-living baselines) to suggest how to split it across 12 spending categories. Fixed expenses — rent, loan EMI, and investment — are deducted first; the remainder is split intelligently across everything else.
+
+Supports 16 cities out of the box: Ahmedabad, Bangalore, Chandigarh, Chennai, Coimbatore, Delhi, Hyderabad, Indore, Jaipur, Kochi, Kolkata, Lucknow, Mumbai, Pune, Surat, Visakhapatnam.
 
 ## Features
 
-- **AI-suggested splits** — base Hyderabad allocations for the first month, blending in your personal history as months accumulate, switching to full Random Forest regression at 3+ months
+- **AI-suggested splits** — base city allocations for the first month, blending in your personal history as months accumulate, switching to full Random Forest regression at 3+ months
+- **Multi-city location support** — pick your city from 16 supported Indian cities; all cost-of-living baselines (rent, groceries, dining, petrol) are calibrated per city. Change city at any time in Settings; the choice persists across sessions
+- **Detect My Location** — one click in Settings uses the browser Geolocation API to auto-detect and select your current city
 - **Fixed-expense deductions** — investment (auto-escalating 10 % each April), loan EMI (active until a configurable end date), and a rent floor that guarantees your home allocation never drops below your rent amount
 - **Seasonal adjustments** — spending weights shift automatically for festive months (Diwali, New Year, summer travel, etc.)
-- **Live cost data** — CPI inflation and petrol prices are fetched each time you request a new prediction; the results are shown as a Live Cost Data card on the dashboard
+- **Live cost data** — CPI inflation and petrol prices are fetched each time you request a new prediction; results shown as a Live Cost Data card on the dashboard labelled with your active city
 - **Dashboard** — stat pills for total budget, investment, and rent; category splits with coloured progress bars; three right-column cards (Living Budget breakdown, allocation donut with leader-line labels, live cost data); month-over-month comparison chart; trend chart; recent months table; Update and Delete buttons for the current month's budget
 - **History** — full budget history with a total-budget trend line, stacked category allocation chart, and a detailed monthly breakdown table
-- **Settings** — configure rent amount, loan EMI amount, and EMI end date
+- **Settings** — configure location, rent amount, loan EMI amount, and EMI end date
 - **Indian number formatting** — all currency amounts display in the Indian comma convention (e.g. ₹1,30,000.00)
 - **Favicon & branding** — custom SVG bar-chart icon used as the browser favicon and in the navbar
 - **Background service** — ships as a macOS LaunchAgent; starts automatically at login and serves on `http://127.0.0.1:8080/` with no UI or notifications
@@ -113,13 +117,13 @@ The server runs with `--noreload` to prevent Django's file-watcher from polling 
 1. **Dashboard** — the landing page shows the current month's budget (if set), split breakdown, and three cards on the right: a **Living Budget** card (total − investment − rent − loan EMI), the **Allocation donut**, and **Live Cost Data** (CPI, petrol, indices). Below that: historical charts and a recent months table.
 2. **Set Budget** — enter your total monthly income. The AI generates a suggested split; review and adjust percentages, then confirm to save.
 3. **History** — browse all saved months, edit or delete individual entries.
-4. **Settings** — update your monthly rent, loan EMI amount, and the month/year the EMI ends.
+4. **Settings** — select your city (dropdown or auto-detect), update your monthly rent, loan EMI amount, and the month/year the EMI ends. All cost-of-living data and ML suggestions update automatically to reflect the chosen city.
 
 ### How the model works
 
 | History available | Strategy |
 |---|---|
-| 0 months | Hyderabad base allocations (adjusted for season and live cost data) |
+| 0 months | City-specific base allocations (adjusted for season and live cost data) |
 | 1–2 months | Blend: `(1 − α) × base + α × rolling average`, where `α = n / 3` |
 | 3+ months | Random Forest regression on the 10 ML categories, blended with base at `min(n/12, 0.85)` weight |
 
@@ -129,7 +133,15 @@ Investment and loan EMI are **fixed amounts** (not predicted); they are deducted
 
 `GET /api/predict/?budget=<amount>&year=<year>&month=<month>`
 
-Returns a JSON object with predicted percentages and amounts for each category, plus investment, EMI, and rent values.
+Returns predicted percentages and amounts for each category, plus investment, EMI, and rent values.
+
+`GET /api/detect-location/?lat=<latitude>&lon=<longitude>`
+
+Reverse-geocodes the supplied coordinates (via OpenStreetMap Nominatim) and returns the best-matching supported city name alongside the full list of supported cities.
+
+```json
+{ "city": "Bangalore", "supported_cities": ["Ahmedabad", "Bangalore", ...] }
+```
 
 ## Notes
 

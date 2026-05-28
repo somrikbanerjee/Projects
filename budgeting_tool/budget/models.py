@@ -40,6 +40,7 @@ class AppSettings(models.Model):
     emi_amount     = models.DecimalField(max_digits=10, decimal_places=2, default=28168)
     emi_end_year   = models.IntegerField(default=2028)
     emi_end_month  = models.IntegerField(default=9)
+    location       = models.CharField(max_length=100, default='Hyderabad')
     updated_at     = models.DateTimeField(auto_now=True)
 
     class Meta:
@@ -113,9 +114,10 @@ class BudgetSplit(models.Model):
 
 
 class CostSnapshot(models.Model):
-    """Stores monthly fetched cost-of-living and CPI data for Hyderabad."""
+    """Stores monthly fetched cost-of-living and CPI data per city."""
     year           = models.IntegerField()
     month          = models.IntegerField()
+    location       = models.CharField(max_length=100, default='Hyderabad')
     fetched_at     = models.DateTimeField(auto_now_add=True)
     india_cpi             = models.FloatField(null=True, blank=True)
     india_inflation_pct   = models.FloatField(null=True, blank=True)
@@ -127,8 +129,8 @@ class CostSnapshot(models.Model):
     raw_data              = models.JSONField(default=dict, blank=True)
 
     class Meta:
-        unique_together = ('year', 'month')
+        unique_together = ('year', 'month', 'location')
         ordering = ['-year', '-month']
 
     def __str__(self):
-        return f"CostSnapshot {calendar.month_abbr[self.month]} {self.year}"
+        return f"CostSnapshot {self.location} {calendar.month_abbr[self.month]} {self.year}"

@@ -9,6 +9,27 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.9.0] — 2026-05-28
+
+### Added
+- **Multi-city location support** — cost-of-living data, petrol prices, rent/groceries/restaurant indices, and ML budget suggestions are now calibrated per city rather than fixed to Hyderabad. 16 Indian cities are supported out of the box: Ahmedabad, Bangalore, Chandigarh, Chennai, Coimbatore, Delhi, Hyderabad, Indore, Jaipur, Kochi, Kolkata, Lucknow, Mumbai, Pune, Surat, Visakhapatnam.
+- **Location picker in Settings** — a new section at the top of the Settings page shows the currently active city and a dropdown to switch to any supported city. The choice is saved with the rest of the settings form and persists across sessions.
+- **"Detect My Location" button** — uses the browser Geolocation API to obtain the device's coordinates, then calls the new `/api/detect-location/` endpoint to reverse-geocode them (via OpenStreetMap Nominatim) to the best-matching supported city. The result is auto-populated in the dropdown; the user can still override it before saving.
+- **`/api/detect-location/` endpoint** — `GET /api/detect-location/?lat=<lat>&lon=<lon>` accepts coordinates, calls Nominatim with a `User-Agent` header, resolves the city name (including alias handling for Bengaluru → Bangalore, New Delhi → Delhi, etc.), and returns `{ "city": "<name>", "supported_cities": [...] }`.
+- **`CITY_BASELINES` dict in `cost_data.py`** — per-city calibrated baselines (rent index, groceries index, restaurant index, 2024 petrol base price, inflation fallback) sourced from Numbeo 2025–2026 surveys and state-level petrol pricing data.
+- **`resolve_city_from_coords(lat, lon)`** in `cost_data.py` — reverse-geocodes coordinates and maps to a supported city with alias normalisation.
+- **`location` field on `AppSettings`** — `CharField(max_length=100, default='Hyderabad')`; the singleton row persists the selected city.
+- **`location` field on `CostSnapshot`** — each city gets its own monthly snapshot cache; `unique_together` changed from `(year, month)` to `(year, month, location)`.
+
+### Changed
+- `fetch_live_cost_data`, `get_or_fetch_cost_snapshot`, and `cost_snapshot_to_adjustments` all accept a `city` parameter and use that city's baseline instead of the hardcoded Hyderabad values.
+- `get_prediction_for_month` in `ml_engine.py` reads `settings.location` and passes it through to the cost snapshot and adjustment functions so ML suggestions reflect the active city's cost structure.
+- Dashboard subtitle ("Hyderabad Budget Intelligence"), empty-state text, Live Cost Data card header, and petrol price label are now dynamic — they render the active location name from context.
+- Base page `<title>` tag no longer hardcodes "Hyderabad"; footer text updated to remove the city reference.
+- Migration `0003_location_support` applied.
+
+---
+
 ## [0.8.0] — 2026-05-28
 
 ### Changed
