@@ -1,6 +1,6 @@
 # BudgetIQ
 
-A personal budgeting web application for Indian cities. Enter your monthly salary, and BudgetIQ uses a machine-learning model (Random Forest regression blended with city-specific cost-of-living baselines) to suggest how to split it across 12 spending categories. Fixed expenses — rent, loan EMI, and investment — are deducted first; the remainder is split intelligently across everything else.
+A personal budgeting web application for Indian cities. Enter your total available budget, and BudgetIQ uses a machine-learning model (Random Forest regression blended with city-specific cost-of-living baselines) to suggest how to split it across 12 spending categories. Fixed expenses — rent, loan EMI, and investment — are deducted first; the remainder is split intelligently across everything else.
 
 Supports 16 cities out of the box: Ahmedabad, Bangalore, Chandigarh, Chennai, Coimbatore, Delhi, Hyderabad, Indore, Jaipur, Kochi, Kolkata, Lucknow, Mumbai, Pune, Surat, Visakhapatnam.
 
