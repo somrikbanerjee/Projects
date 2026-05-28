@@ -11,9 +11,15 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 """
 
 from pathlib import Path
+import os
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+# SQLite must live outside Google Drive — the sync client locks the file
+# and causes "unable to open database" errors.
+LOCAL_DATA_DIR = Path.home() / '.local' / 'share' / 'budgetiq'
+LOCAL_DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 
 # Quick-start development settings - unsuitable for production
@@ -76,7 +82,7 @@ WSGI_APPLICATION = 'budgeting_tool.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'NAME': LOCAL_DATA_DIR / 'db.sqlite3',
     }
 }
 

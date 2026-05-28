@@ -1,0 +1,1703 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ExpenseIQ – Browser Emulator</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --blue: #2563EB; --blue-dim: #EFF6FF;
+    --red: #F43F5E;  --red-dim: #FFF1F2;
+    --green: #10B981; --purple: #7C3AED;
+    --bg: #F1F5F9; --surface: #FFFFFF;
+    --border: #E2E8F0; --border2: #F1F5F9;
+    --text: #0F172A; --text2: #64748B; --text3: #CBD5E1;
+    --shadow-sm: 0 1px 2px rgba(15,23,42,.05);
+    --shadow: 0 1px 3px rgba(15,23,42,.07), 0 1px 2px rgba(15,23,42,.04);
+    --font: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', system-ui, sans-serif;
+  }
+  body {
+    background: linear-gradient(150deg, #1e1b4b 0%, #3730a3 45%, #1d4ed8 100%);
+    min-height: 100vh; display: flex; align-items: center; justify-content: center;
+    font-family: var(--font); user-select: none;
+    color: var(--text); /* base colour — all unstyled children inherit this */
+  }
+
+  /* ── Phone Frame ── */
+  .phone-wrap { filter: drop-shadow(0 48px 80px rgba(0,0,0,.55)); }
+  .phone-frame {
+    width: 393px; height: 852px; background: #000; border-radius: 54px;
+    padding: 12px; position: relative;
+    box-shadow: inset 0 0 0 1.5px #1c1c1c, inset 0 0 0 3.5px #080808;
+  }
+  /* Dynamic Island */
+  .phone-frame::before {
+    content: ''; position: absolute; top: 14px; left: 50%; transform: translateX(-50%);
+    width: 124px; height: 36px; background: #000; border-radius: 20px; z-index: 10;
+  }
+  .phone-screen {
+    width: 100%; height: 100%; background: var(--bg); border-radius: 43px;
+    overflow: hidden; display: flex; flex-direction: column; position: relative;
+  }
+
+  /* ── Status Bar ── */
+  .status-bar {
+    background: var(--surface); height: 52px; display: flex;
+    align-items: flex-end; justify-content: space-between;
+    padding: 0 28px 10px; flex-shrink: 0;
+  }
+  .status-time { font-weight: 700; font-size: 15px; letter-spacing: -.3px; color: var(--text); }
+  .status-icons { display: flex; gap: 5px; align-items: center; color: var(--text); }
+
+  /* ── App Bar ── */
+  .app-bar {
+    background: var(--surface); padding: 0 4px; display: flex;
+    align-items: center; min-height: 54px; flex-shrink: 0;
+    box-shadow: 0 1px 0 var(--border);
+  }
+  .app-bar .title { font-size: 19px; font-weight: 800; flex: 1; padding: 0 12px; letter-spacing: -.5px; color: var(--text); }
+  .app-bar .month-nav { display: flex; align-items: center; }
+  .app-bar .month-nav span { font-size: 18px; font-weight: 800; letter-spacing: -.5px; color: var(--text); }
+  .icon-btn {
+    width: 40px; height: 40px; border: none; background: none; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 12px; color: var(--text2); transition: background .15s;
+  }
+  .icon-btn:hover { background: var(--bg); }
+  .icon-btn svg { width: 20px; height: 20px; }
+
+  /* ── Summary Bar ── */
+  .summary-bar {
+    background: var(--surface); display: flex; align-items: center;
+    padding: 10px 4px; box-shadow: 0 1px 0 var(--border); flex-shrink: 0;
+  }
+  .summary-item { flex: 1; text-align: center; }
+  .summary-item .s-label {
+    font-size: 10px; color: var(--text2); display: block;
+    font-weight: 600; text-transform: uppercase; letter-spacing: .6px;
+  }
+  .summary-item .s-amount {
+    font-size: 15px; font-weight: 800; letter-spacing: -.4px;
+    margin-top: 2px; display: block;
+  }
+  .s-divider { width: 1px; height: 34px; background: var(--border); }
+  .income-color { color: var(--blue); }
+  .expense-color { color: var(--red); }
+
+  /* ── Scrollable content ── */
+  .screen-content { flex: 1; overflow-y: auto; overflow-x: hidden; scrollbar-width: none; }
+  .screen-content::-webkit-scrollbar { display: none; }
+
+  /* ── Day Group ── */
+  .day-header {
+    background: var(--bg); padding: 7px 16px;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .day-left { display: flex; align-items: center; gap: 7px; }
+  .day-num { font-size: 20px; font-weight: 800; letter-spacing: -.6px; color: var(--text); }
+  .day-badge {
+    background: var(--text2); color: #fff; font-size: 9px; font-weight: 700;
+    padding: 2px 6px; border-radius: 5px; text-transform: uppercase; letter-spacing: .5px;
+  }
+  .day-date { font-size: 11.5px; color: var(--text3); }
+  .day-amounts { display: flex; gap: 10px; }
+  .day-amounts span { font-size: 12.5px; font-weight: 700; letter-spacing: -.2px; }
+
+  /* ── Transaction Row ── */
+  .tx-row {
+    background: var(--surface); display: flex; align-items: center;
+    padding: 10px 16px; gap: 12px; cursor: pointer;
+    border-bottom: 1px solid var(--border2); transition: background .1s;
+  }
+  .tx-row:active { background: var(--bg); }
+  .tx-icon {
+    width: 40px; height: 40px; border-radius: 13px; display: flex;
+    align-items: center; justify-content: center; font-size: 17px; flex-shrink: 0;
+  }
+  .tx-info { flex: 1; min-width: 0; }
+  .tx-name { font-size: 14px; font-weight: 600; color: var(--text); letter-spacing: -.2px; }
+  .tx-sub { font-size: 11.5px; color: var(--text2); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tx-amount { font-size: 14px; font-weight: 700; white-space: nowrap; letter-spacing: -.3px; }
+
+  /* ── FAB ── */
+  .fab {
+    position: absolute; bottom: 78px; right: 18px; width: 52px; height: 52px;
+    border-radius: 16px; background: var(--red); border: none; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 4px 16px rgba(244,63,94,.38), 0 1px 4px rgba(0,0,0,.12);
+    transition: transform .18s cubic-bezier(.34,1.56,.64,1), box-shadow .18s; z-index: 10;
+  }
+  .fab svg { width: 24px; height: 24px; stroke: #fff; stroke-width: 2.5; }
+  .fab:hover { transform: translateY(-3px); box-shadow: 0 8px 24px rgba(244,63,94,.5); }
+  .fab:active { transform: scale(.93); }
+
+  /* ── Bottom Navigation ── */
+  .bottom-nav {
+    background: var(--surface); height: 72px; display: flex; flex-shrink: 0;
+    border-top: 1px solid var(--border); padding: 6px 10px 2px;
+    gap: 2px; z-index: 5;
+  }
+  .nav-item {
+    flex: 1; display: flex; flex-direction: column; align-items: center;
+    justify-content: center; gap: 3px; cursor: pointer; border: none; background: none;
+    color: var(--text3); border-radius: 14px; padding: 6px 4px;
+    transition: all .2s cubic-bezier(.34,1.2,.64,1);
+  }
+  .nav-item:hover { color: var(--text2); background: var(--bg); }
+  .nav-item.active { color: var(--blue); background: var(--blue-dim); }
+  .nav-item svg { width: 22px; height: 22px; transition: transform .2s; }
+  .nav-item.active svg { transform: scale(1.08); }
+  .nav-item .nav-label { font-size: 10px; font-weight: 600; letter-spacing: .1px; }
+
+  /* ── Stats Screen ── */
+  .stats-mode-bar { background: var(--surface); display: flex; flex-shrink: 0; border-bottom: 1px solid var(--border); }
+  .stats-mode-btn {
+    flex: 1; padding: 11px; text-align: center; border: none; background: none;
+    cursor: pointer; font-size: 13px; color: var(--text2); font-family: var(--font); font-weight: 500;
+  }
+  .stats-mode-btn.active {
+    color: var(--blue); font-weight: 700;
+    box-shadow: inset 0 -2px 0 var(--blue);
+  }
+  .chart-area { padding: 16px; background: var(--surface); display: flex; align-items: center; justify-content: center; }
+  canvas#pie-chart { display: block; }
+  .cat-stat-row {
+    background: var(--surface); display: flex; align-items: center;
+    padding: 12px 16px; gap: 12px; border-bottom: 1px solid var(--border2);
+  }
+  .cat-pct-box {
+    width: 42px; height: 42px; border-radius: 12px; display: flex;
+    align-items: center; justify-content: center; color: #fff;
+    font-size: 11px; font-weight: 800; flex-shrink: 0;
+  }
+  .cat-stat-name { flex: 1; font-size: 14px; font-weight: 600; color: var(--text); }
+  .cat-stat-amount { font-size: 14px; font-weight: 700; color: var(--text); }
+
+  /* ── Accounts Screen ── */
+  .net-worth-bar {
+    background: var(--surface); display: flex;
+    padding: 12px 4px; border-bottom: 1px solid var(--border); flex-shrink: 0;
+  }
+  .nw-item { flex: 1; text-align: center; }
+  .nw-label { font-size: 10px; color: var(--text2); display: block; font-weight: 600; text-transform: uppercase; letter-spacing: .5px; }
+  .nw-value { font-size: 16px; font-weight: 800; letter-spacing: -.4px; margin-top: 2px; }
+  .group-header {
+    background: var(--bg); padding: 8px 16px;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .group-name { font-size: 12px; color: var(--text2); font-weight: 700; text-transform: uppercase; letter-spacing: .5px; }
+  .group-total { font-size: 13px; font-weight: 700; }
+  .acc-row {
+    background: var(--surface); display: flex; align-items: center;
+    padding: 12px 12px 12px 16px; border-bottom: 1px solid var(--border2);
+    cursor: pointer; transition: background .1s;
+  }
+  .acc-row:active { background: var(--bg); }
+  .acc-name { flex: 1; font-size: 14px; font-weight: 500; color: var(--text); }
+  .acc-balance { font-size: 14px; font-weight: 700; letter-spacing: -.3px; }
+  .acc-menu-btn {
+    width: 34px; height: 34px; border: none; background: none; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 10px; color: var(--text3); margin-left: 4px;
+    transition: background .15s, color .15s;
+  }
+  .acc-menu-btn:hover { background: var(--bg); color: var(--text2); }
+  .acc-menu-btn svg { width: 18px; height: 18px; }
+
+  /* ── Inline action row (shown after tap on ⋮) ── */
+  .acc-actions {
+    display: none; background: var(--bg); border-bottom: 1px solid var(--border);
+    padding: 6px 16px; gap: 8px;
+  }
+  .acc-actions.open { display: flex; }
+  .acc-action-btn {
+    flex: 1; padding: 8px; border: none; border-radius: 10px; cursor: pointer;
+    font-size: 12px; font-weight: 600; font-family: var(--font);
+    display: flex; align-items: center; justify-content: center; gap: 5px;
+  }
+  .acc-action-btn.edit { background: var(--blue-dim); color: var(--blue); }
+  .acc-action-btn.del  { background: var(--red-dim);  color: var(--red);  }
+
+  /* ── Modal ── */
+  .modal-overlay {
+    position: absolute; inset: 0; background: rgba(15,23,42,.45);
+    display: none; z-index: 100; align-items: flex-end;
+    backdrop-filter: blur(2px);
+  }
+  .modal-overlay.open { display: flex; }
+  .modal {
+    background: var(--surface); width: 100%; border-radius: 28px 28px 0 0;
+    max-height: 92%; overflow-y: auto; padding: 0 0 28px;
+    animation: slide-up .28s cubic-bezier(.32,1.04,.64,1);
+  }
+  @keyframes slide-up { from { transform: translateY(100%); opacity: .6; } to { transform: translateY(0); opacity: 1; } }
+  .modal-handle {
+    width: 36px; height: 4px; background: var(--border); border-radius: 2px;
+    margin: 14px auto 6px;
+  }
+  .modal-title {
+    font-size: 17px; font-weight: 800; padding: 6px 20px 16px; letter-spacing: -.3px;
+    display: flex; align-items: center; justify-content: space-between;
+    color: var(--text);
+  }
+  .modal-close {
+    width: 30px; height: 30px; border: none; border-radius: 50%; background: var(--bg);
+    cursor: pointer; color: var(--text2); font-size: 14px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .modal-body { padding: 0 20px; display: flex; flex-direction: column; gap: 14px; }
+
+  /* ── Type Selector ── */
+  .type-selector {
+    display: grid; grid-template-columns: 1fr 1fr 1fr;
+    background: var(--bg); border-radius: 14px; padding: 3px; gap: 2px;
+  }
+  .type-btn {
+    padding: 10px 4px; border: none; cursor: pointer; font-size: 13px;
+    font-family: var(--font); color: var(--text2); background: transparent;
+    border-radius: 11px; transition: all .18s; font-weight: 600;
+  }
+  .type-btn.active-income { background: var(--blue); color: #fff; box-shadow: 0 2px 8px rgba(37,99,235,.3); }
+  .type-btn.active-expense { background: var(--red); color: #fff; box-shadow: 0 2px 8px rgba(244,63,94,.3); }
+  .type-btn.active-transfer { background: var(--purple); color: #fff; box-shadow: 0 2px 8px rgba(124,58,237,.3); }
+
+  /* ── Form Fields ── */
+  .field-label { font-size: 11.5px; color: var(--text2); font-weight: 600; margin-bottom: 6px; letter-spacing: .2px; }
+  .amount-input-wrap {
+    display: flex; align-items: center; gap: 8px;
+    border: 1.5px solid var(--border); border-radius: 14px; padding: 12px 16px;
+    background: var(--bg); transition: border-color .2s, background .2s;
+  }
+  .amount-input-wrap:focus-within { border-color: var(--blue); background: var(--surface); }
+  .amount-prefix { font-size: 20px; font-weight: 800; color: var(--text2); }
+  .amount-input {
+    flex: 1; border: none; outline: none; font-size: 26px; font-weight: 800;
+    font-family: var(--font); color: var(--text); background: transparent;
+    min-width: 0; letter-spacing: -.5px;
+  }
+  input[type="date"], input[type="text"], select, textarea {
+    width: 100%; border: 1.5px solid var(--border); border-radius: 12px;
+    padding: 11px 14px; font-size: 14px; font-family: var(--font);
+    outline: none; background: var(--bg); color: var(--text);
+    transition: border-color .2s, background .2s;
+  }
+  input:focus, select:focus, textarea:focus { border-color: var(--blue); background: var(--surface); }
+  select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%2364748B' stroke-width='1.5' fill='none'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 14px center; padding-right: 36px; }
+
+  /* ── Category Grid ── */
+  .cat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+  .cat-item {
+    display: flex; flex-direction: column; align-items: center; gap: 4px;
+    padding: 10px 4px; border-radius: 14px; cursor: pointer;
+    background: var(--bg); border: 2px solid transparent; transition: all .15s;
+  }
+  .cat-item.selected { border-color: var(--selected-color, var(--blue)); background: var(--selected-bg, var(--blue-dim)); }
+  .cat-item .ci-icon { font-size: 21px; }
+  .cat-item .ci-name { font-size: 9.5px; color: var(--text); text-align: center; font-weight: 500; }
+
+  /* ── Pill Selector ── */
+  .pill-scroll { display: flex; gap: 7px; overflow-x: auto; padding-bottom: 2px; scrollbar-width: none; }
+  .pill-scroll::-webkit-scrollbar { display: none; }
+  .pill {
+    padding: 6px 14px; border-radius: 20px; border: 1.5px solid var(--border);
+    cursor: pointer; white-space: nowrap; font-size: 13px; background: var(--bg);
+    font-family: var(--font); transition: all .15s; color: var(--text2); font-weight: 500;
+  }
+  .pill.selected { background: var(--blue); border-color: var(--blue); color: #fff; font-weight: 700; }
+
+  /* ── Save / Action Buttons ── */
+  .save-btn {
+    width: 100%; padding: 15px; border: none; border-radius: 16px;
+    background: var(--blue); color: #fff; font-size: 16px; font-weight: 700;
+    font-family: var(--font); cursor: pointer; margin-top: 4px;
+    box-shadow: 0 4px 12px rgba(37,99,235,.3); transition: opacity .15s, transform .15s;
+    letter-spacing: -.2px;
+  }
+  .save-btn:hover { opacity: .92; }
+  .save-btn:active { transform: scale(.97); }
+  .save-btn:disabled { opacity: .45; cursor: default; box-shadow: none; }
+  .secondary-btn {
+    padding: 10px 18px; border: 1.5px solid var(--border); border-radius: 12px;
+    background: var(--bg); font-family: var(--font); cursor: pointer; font-size: 14px;
+    color: var(--text2); font-weight: 600;
+  }
+  .danger-btn { color: var(--red); border-color: var(--red-dim); background: var(--red-dim); }
+
+  /* ── Empty State ── */
+  .empty-state {
+    display: flex; flex-direction: column; align-items: center;
+    justify-content: center; padding: 64px 20px; color: var(--text2); gap: 10px;
+  }
+  .empty-state .empty-icon { font-size: 44px; opacity: .6; }
+
+  /* ── Account Detail Back Header ── */
+  .back-header {
+    background: var(--surface); padding: 0 4px; display: flex;
+    align-items: center; min-height: 54px; flex-shrink: 0;
+    box-shadow: 0 1px 0 var(--border);
+  }
+  .back-header .bh-info { flex: 1; padding: 0 8px; }
+  .back-header .bh-name { font-size: 17px; font-weight: 800; letter-spacing: -.4px; color: var(--text); }
+  .back-header .bh-balance { font-size: 12.5px; font-weight: 600; }
+
+  /* ── Settings / Manage screens ── */
+  .setting-section { margin-top: 8px; }
+  .setting-item {
+    background: var(--surface); display: flex; align-items: center;
+    padding: 14px 16px; gap: 12px; border-bottom: 1px solid var(--border2); cursor: pointer;
+    transition: background .1s;
+  }
+  .setting-item:active { background: var(--bg); }
+  .si-icon { font-size: 19px; width: 26px; text-align: center; }
+  .si-label { flex: 1; font-size: 15px; font-weight: 500; color: var(--text); }
+  .si-arrow { color: var(--text3); font-size: 16px; }
+
+  /* ── Confirm Dialog ── */
+  .confirm-overlay {
+    position: absolute; inset: 0; background: rgba(15,23,42,.4);
+    display: none; z-index: 200; align-items: center; justify-content: center;
+    padding: 20px; backdrop-filter: blur(2px);
+  }
+  .confirm-overlay.open { display: flex; }
+  .confirm-box {
+    background: var(--surface); border-radius: 22px; padding: 24px 20px; width: 100%;
+    box-shadow: 0 20px 60px rgba(0,0,0,.2);
+  }
+  .confirm-box h3 { font-size: 16px; font-weight: 800; margin-bottom: 6px; letter-spacing: -.3px; color: var(--text); }
+  .confirm-box p { font-size: 13.5px; color: var(--text2); margin-bottom: 20px; line-height: 1.5; }
+  .confirm-actions { display: flex; gap: 10px; justify-content: flex-end; }
+
+  /* ── Dark Mode ── */
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --blue: #60A5FA; --blue-dim: #1E3A5F;
+      --red: #FB7185;  --red-dim: #4C1327;
+      --green: #34D399; --purple: #A78BFA;
+      --bg: #0F172A; --surface: #1E293B;
+      --border: #334155; --border2: #1E293B;
+      --text: #F1F5F9; --text2: #94A3B8; --text3: #475569;
+    }
+    body { background: linear-gradient(150deg, #000 0%, #0f0c29 45%, #130f40 100%); }
+    .phone-frame { background: #000; }
+    .phone-screen { background: var(--bg); }
+    input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(1); }
+    select option { background: var(--surface); color: var(--text); }
+    .acc-menu-btn:hover { background: var(--border); }
+    .modal-overlay { background: rgba(0,0,0,.65); }
+  }
+
+  /* ── Toast ── */
+  .toast {
+    position: absolute; bottom: 82px; left: 50%; transform: translateX(-50%);
+    background: rgba(15,23,42,.88); color: #fff; padding: 10px 20px; border-radius: 20px;
+    font-size: 13px; font-weight: 500; white-space: nowrap; opacity: 0;
+    transition: opacity .25s; z-index: 300; pointer-events: none;
+    backdrop-filter: blur(8px);
+  }
+  .toast.show { opacity: 1; }
+
+  /* ── Group header delete button ── */
+  .group-del-btn {
+    border: none; background: none; cursor: pointer; color: var(--text3);
+    padding: 4px 6px; border-radius: 8px; font-size: 13px; margin-left: 4px;
+    transition: color .15s, background .15s;
+  }
+  .group-del-btn:hover { color: var(--red); background: var(--red-dim); }
+</style>
+</head>
+<body>
+
+<div class="phone-wrap">
+  <div class="phone-frame">
+    <div class="phone-screen" id="app">
+
+      <!-- Status Bar -->
+      <div class="status-bar">
+        <span class="status-time" id="status-time">9:41</span>
+        <div class="status-icons">
+          <svg viewBox="0 0 24 24" fill="currentColor" width="15" height="15"><path d="M1 9l2 2c4.97-4.97 13.03-4.97 18 0l2-2C16.93 2.93 7.08 2.93 1 9zm8 8l3 3 3-3c-1.65-1.66-4.34-1.66-6 0zm-4-4l2 2c2.76-2.76 7.24-2.76 10 0l2-2C15.14 9.14 8.87 9.14 5 13z"/></svg>
+          <svg viewBox="0 0 24 24" fill="currentColor" width="15" height="15"><path d="M15.67 4H14V2h-4v2H8.33C7.6 4 7 4.6 7 5.33v15.33C7 21.4 7.6 22 8.33 22h7.33c.74 0 1.34-.6 1.34-1.33V5.33C17 4.6 16.4 4 15.67 4z"/></svg>
+        </div>
+      </div>
+
+      <!-- Dynamic Screen Content injected here -->
+      <div id="screen-root" style="flex:1;display:flex;flex-direction:column;overflow:hidden;"></div>
+
+      <!-- Bottom Navigation -->
+      <div class="bottom-nav" id="bottom-nav">
+        <button class="nav-item active" onclick="navigate('transactions')" id="nav-transactions">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14,2 14,8 20,8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="13" y2="17"/>
+          </svg>
+          <span class="nav-label">Trans.</span>
+        </button>
+        <button class="nav-item" onclick="navigate('stats')" id="nav-stats">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>
+          </svg>
+          <span class="nav-label">Stats</span>
+        </button>
+        <button class="nav-item" onclick="navigate('accounts')" id="nav-accounts">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/><line x1="6" y1="15" x2="8" y2="15"/>
+          </svg>
+          <span class="nav-label">Accounts</span>
+        </button>
+        <button class="nav-item" onclick="navigate('more')" id="nav-more">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="5" r="1" fill="currentColor"/><circle cx="12" cy="12" r="1" fill="currentColor"/><circle cx="12" cy="19" r="1" fill="currentColor"/>
+          </svg>
+          <span class="nav-label">More</span>
+        </button>
+      </div>
+
+      <!-- Toast -->
+      <div class="toast" id="toast"></div>
+
+      <!-- Add/Edit Transaction Modal -->
+      <div class="modal-overlay" id="tx-modal">
+        <div class="modal">
+          <div class="modal-handle"></div>
+          <div class="modal-title">
+            <span id="tx-modal-title">Add Transaction</span>
+            <button class="modal-close" onclick="closeTxModal()">✕</button>
+          </div>
+          <div class="modal-body">
+            <div class="type-selector" id="type-selector">
+              <button class="type-btn" id="btn-income" onclick="setTxType('INCOME')">Income</button>
+              <button class="type-btn active-expense" id="btn-expense" onclick="setTxType('EXPENSE')">Expense</button>
+              <button class="type-btn" id="btn-transfer" onclick="setTxType('TRANSFER')">Transfer</button>
+            </div>
+            <div>
+              <div class="field-label">Amount (₹)</div>
+              <div class="amount-input-wrap">
+                <span class="amount-prefix">₹</span>
+                <input class="amount-input" type="number" id="tx-amount" placeholder="0.00" min="0" step="0.01">
+              </div>
+            </div>
+            <div>
+              <div class="field-label">Date</div>
+              <input type="date" id="tx-date">
+            </div>
+            <div id="account-section">
+              <div class="field-label">Account</div>
+              <div class="pill-scroll" id="tx-account-pills"></div>
+            </div>
+            <div id="to-account-section" style="display:none;">
+              <div class="field-label">To Account</div>
+              <div class="pill-scroll" id="tx-to-account-pills"></div>
+            </div>
+            <div id="category-section">
+              <div class="field-label">Category</div>
+              <div class="cat-grid" id="cat-grid"></div>
+            </div>
+            <div>
+              <div class="field-label">Note (optional)</div>
+              <input type="text" id="tx-note" placeholder="Add a note...">
+            </div>
+            <div style="display:flex; gap:10px;">
+              <button class="save-btn" style="flex:1;" onclick="saveTx()">Save</button>
+              <button id="delete-tx-btn" class="secondary-btn danger-btn" onclick="deleteTx()" style="display:none;">Delete</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Add Account Modal -->
+      <div class="modal-overlay" id="acc-modal">
+        <div class="modal">
+          <div class="modal-handle"></div>
+          <div class="modal-title">
+            <span id="acc-modal-title">Add Account</span>
+            <button class="modal-close" onclick="closeAccModal()">✕</button>
+          </div>
+          <div class="modal-body">
+            <div>
+              <div class="field-label">Account Name</div>
+              <input type="text" id="acc-name" placeholder="e.g. HDFC Savings">
+            </div>
+            <div>
+              <div class="field-label">Account Group</div>
+              <select id="acc-group"></select>
+            </div>
+            <div>
+              <div class="field-label">Opening Balance (₹)</div>
+              <input type="number" id="acc-default-bal" placeholder="0.00" min="0" step="0.01">
+            </div>
+            <div style="display:flex;gap:10px;">
+              <button class="save-btn" style="flex:1;" onclick="saveAccount()">Add Account</button>
+              <button id="delete-acc-btn" class="secondary-btn danger-btn" onclick="deleteAccount()" style="display:none;">Delete</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Add Group Modal -->
+      <div class="modal-overlay" id="group-modal">
+        <div class="modal">
+          <div class="modal-handle"></div>
+          <div class="modal-title">
+            <span>Add Account Group</span>
+            <button class="modal-close" onclick="document.getElementById('group-modal').classList.remove('open')">✕</button>
+          </div>
+          <div class="modal-body">
+            <div>
+              <div class="field-label">Group Name</div>
+              <input type="text" id="group-name" placeholder="e.g. Investments">
+            </div>
+            <div>
+              <div class="field-label">Group Type</div>
+              <select id="group-type">
+                <option value="OTHERS">Others</option>
+                <option value="LIQUID_SAVINGS">Liquid Savings</option>
+                <option value="INVESTMENTS">Investments</option>
+                <option value="LOAN">Loan</option>
+              </select>
+            </div>
+            <button class="save-btn" onclick="saveGroup()">Add Group</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Add Category Modal -->
+      <div class="modal-overlay" id="cat-modal">
+        <div class="modal">
+          <div class="modal-handle"></div>
+          <div class="modal-title">
+            <span id="cat-modal-title">Add Category</span>
+            <button class="modal-close" onclick="document.getElementById('cat-modal').classList.remove('open')">✕</button>
+          </div>
+          <div class="modal-body">
+            <div>
+              <div class="field-label">Name</div>
+              <input type="text" id="cat-name" placeholder="e.g. Dining Out">
+            </div>
+            <div>
+              <div class="field-label">Type</div>
+              <select id="cat-type">
+                <option value="EXPENSE">Expense</option>
+                <option value="INCOME">Income</option>
+              </select>
+            </div>
+            <div>
+              <div class="field-label">Icon (emoji)</div>
+              <input type="text" id="cat-icon" placeholder="🛒" maxlength="2">
+            </div>
+            <div>
+              <div class="field-label">Color</div>
+              <input type="color" id="cat-color" value="#4CAF50" style="width:100%;height:44px;border-radius:12px;border:1.5px solid var(--divider);cursor:pointer;">
+            </div>
+            <div style="display:flex;gap:10px;">
+              <button class="save-btn" style="flex:1;" onclick="saveCategory()">Save</button>
+              <button id="delete-cat-btn" class="secondary-btn danger-btn" onclick="deleteCategory()" style="display:none;">Delete</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Confirm Dialog -->
+      <div class="confirm-overlay" id="confirm-overlay">
+        <div class="confirm-box">
+          <h3 id="confirm-title">Confirm</h3>
+          <p id="confirm-msg">Are you sure?</p>
+          <div class="confirm-actions">
+            <button class="secondary-btn" onclick="hideConfirm()">Cancel</button>
+            <button class="secondary-btn danger-btn" id="confirm-ok">Delete</button>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- phone-screen -->
+  </div><!-- phone-frame -->
+</div><!-- phone-wrap -->
+
+<script>
+// ═══════════════════════════════════════════════════════
+//  DATA & STORAGE
+// ═══════════════════════════════════════════════════════
+const CHART_COLORS = [
+  '#EF5350','#FF9800','#FFEB3B','#4CAF50','#2196F3','#9C27B0',
+  '#00BCD4','#FF5722','#8BC34A','#E91E63','#607D8B','#795548'
+];
+
+function defaultData() {
+  return {
+    nextId: 1000,
+    accountGroups: [
+      { id:1, name:'Wallets', type:'OTHERS', isSystem:true },
+      { id:2, name:'Spending Accounts', type:'OTHERS', isSystem:true },
+      { id:3, name:'Credit Cards', type:'OTHERS', isSystem:true },
+      { id:4, name:'Liquid Savings', type:'LIQUID_SAVINGS', isSystem:true },
+      { id:5, name:'Loan', type:'LOAN', isSystem:true }
+    ],
+    accounts: [],
+    categories: [
+      { id:101, name:'Food', type:'EXPENSE', icon:'🍔', color:'#FF5722' },
+      { id:102, name:'Transport', type:'EXPENSE', icon:'🚕', color:'#2196F3' },
+      { id:103, name:'Shopping', type:'EXPENSE', icon:'🛍️', color:'#E91E63' },
+      { id:104, name:'Healthcare', type:'EXPENSE', icon:'❤️', color:'#F44336' },
+      { id:105, name:'Home', type:'EXPENSE', icon:'🏠', color:'#9C27B0' },
+      { id:106, name:'Entertainment', type:'EXPENSE', icon:'🎮', color:'#FF9800' },
+      { id:107, name:'Groceries', type:'EXPENSE', icon:'🛒', color:'#4CAF50' },
+      { id:108, name:'Travel', type:'EXPENSE', icon:'✈️', color:'#03A9F4' },
+      { id:109, name:'Investment', type:'EXPENSE', icon:'📈', color:'#8BC34A' },
+      { id:110, name:'Education', type:'EXPENSE', icon:'🎓', color:'#607D8B' },
+      { id:111, name:'Loan EMI', type:'EXPENSE', icon:'🏦', color:'#795548' },
+      { id:112, name:'Other', type:'EXPENSE', icon:'•••', color:'#9E9E9E' },
+      { id:201, name:'Salary', type:'INCOME', icon:'💼', color:'#4CAF50' },
+      { id:202, name:'Freelance', type:'INCOME', icon:'💻', color:'#00BCD4' },
+      { id:203, name:'Interest', type:'INCOME', icon:'💰', color:'#8BC34A' },
+      { id:204, name:'Cashback', type:'INCOME', icon:'🪙', color:'#FFC107' },
+      { id:205, name:'Inv. Return', type:'INCOME', icon:'📈', color:'#2196F3' },
+      { id:206, name:'Other', type:'INCOME', icon:'•••', color:'#9E9E9E' }
+    ],
+    transactions: []
+  };
+}
+
+let db = {};
+function saveDb() { localStorage.setItem('expenseiq_v2', JSON.stringify(db)); }
+function loadDb() {
+  try {
+    const s = localStorage.getItem('expenseiq_v2');
+    db = s ? JSON.parse(s) : defaultData();
+    // Migrate old group types to new simplified scheme
+    db.accountGroups.forEach(g => { g.type = normalizeType(g.type); });
+    saveDb();
+  } catch { db = defaultData(); }
+}
+function nextId() { return ++db.nextId; }
+
+// ═══════════════════════════════════════════════════════
+//  HELPERS
+// ═══════════════════════════════════════════════════════
+function fmtCurrency(n) {
+  const abs = Math.abs(n);
+  const str = abs.toLocaleString('en-IN', { minimumFractionDigits:2, maximumFractionDigits:2 });
+  return (n < 0 ? '-₹' : '₹') + str;
+}
+function todayISO() { return new Date().toISOString().split('T')[0]; }
+function monthKey(date) {
+  const d = date instanceof Date ? date : new Date(date + 'T00:00:00');
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+}
+function parseISO(s) { return new Date(s + 'T00:00:00'); }
+function fmtMonthYear(ym) {
+  const [y,m] = ym.split('-');
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  return `${months[+m-1]} ${y}`;
+}
+function fmtDay(dateStr) {
+  const d = parseISO(dateStr);
+  const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  return { day: d.getDate(), dow: days[d.getDay()], month: d.toISOString().slice(5,7), year: d.getFullYear() };
+}
+function getGroupById(id) { return db.accountGroups.find(g=>g.id===id); }
+function getAccountById(id) { return db.accounts.find(a=>a.id===id); }
+function getCategoryById(id) { return db.categories.find(c=>c.id===id); }
+
+// Normalise legacy type names → new simplified scheme
+function normalizeType(type) {
+  if (['WALLET','SPENDING','CREDIT_CARD','OTHER'].includes(type)) return 'OTHERS';
+  return type; // OTHERS | LIQUID_SAVINGS | INVESTMENTS | LOAN
+}
+function isLiability(groupType) { return normalizeType(groupType) === 'LOAN'; }
+function isRestricted(groupType) {
+  const t = normalizeType(groupType);
+  return t === 'LIQUID_SAVINGS' || t === 'INVESTMENTS' || t === 'LOAN';
+}
+function isOthers(groupType) { return normalizeType(groupType) === 'OTHERS'; }
+
+function computeAffectsBalance(tx) {
+  const fromAcc = getAccountById(tx.accountId);
+  if (!fromAcc) return true;
+  const fromGrp = getGroupById(fromAcc.groupId);
+  if (!fromGrp) return true;
+
+  if (tx.type !== 'TRANSFER') {
+    // Non-transfers in restricted accounts (Liquid Savings / Loan) don't affect
+    // the monthly total — only their cross-Spending transfers do.
+    return !isRestricted(fromGrp.type);
+  }
+
+  // Transfers: only affect the main balance when one side is Restricted
+  // (Liquid Savings / Loan) and the other side is a Spending account.
+  const toAcc = tx.toAccountId ? getAccountById(tx.toAccountId) : null;
+  const toGrp = toAcc ? getGroupById(toAcc.groupId) : null;
+  if (!toGrp) return false;
+
+  return (isRestricted(fromGrp.type) && isOthers(toGrp.type)) ||
+         (isOthers(fromGrp.type)     && isRestricted(toGrp.type));
+}
+
+function getAccountBalance(accId) {
+  const acc = getAccountById(accId);
+  if (!acc) return 0;
+  let bal = acc.defaultBalance || 0;
+  db.transactions.forEach(t => {
+    if (t.type === 'INCOME' && t.accountId === accId) bal += t.amount;
+    else if (t.type === 'EXPENSE' && t.accountId === accId) bal -= t.amount;
+    else if (t.type === 'TRANSFER') {
+      if (t.accountId === accId) bal -= t.amount;
+      if (t.toAccountId === accId) bal += t.amount;
+    }
+  });
+  return bal;
+}
+
+function getMonthlyTxs(ym, accId=null) {
+  return db.transactions.filter(t => {
+    const match = monthKey(t.date) === ym;
+    if (!match) return false;
+    if (accId !== null) return t.accountId === accId || t.toAccountId === accId;
+    return true;
+  });
+}
+
+function getMonthTotals(ym) {
+  const txs = getMonthlyTxs(ym);
+  let income  = txs.filter(t=>t.type==='INCOME' &&t.affectsMainBalance).reduce((s,t)=>s+t.amount, 0);
+  let expense = txs.filter(t=>t.type==='EXPENSE'&&t.affectsMainBalance).reduce((s,t)=>s+t.amount, 0);
+
+  // Qualifying transfers (Restricted ↔ Spending) count as income or expense.
+  // Restricted → Spending: money enters the spending pool = income.
+  // Spending → Restricted: money leaves the spending pool = expense.
+  txs.filter(t=>t.type==='TRANSFER'&&t.affectsMainBalance).forEach(t => {
+    const fromGrp = getGroupById(getAccountById(t.accountId)?.groupId);
+    if (fromGrp && isRestricted(fromGrp.type)) income  += t.amount;
+    else                                        expense += t.amount;
+  });
+
+  return { income, expense };
+}
+
+// ═══════════════════════════════════════════════════════
+//  APP STATE
+// ═══════════════════════════════════════════════════════
+let currentTab = 'transactions';
+let currentMonth = monthKey(new Date());
+let detailAccId = null;
+let statsShowExpense = true;
+let editTxId = null;
+let editAccId = null;
+let editCatId = null;
+let txType = 'EXPENSE';
+let txSelAccId = null;
+let txSelToAccId = null;
+let txSelCatId = null;
+let defaultTxAccId = null;
+
+// ═══════════════════════════════════════════════════════
+//  NAVIGATION
+// ═══════════════════════════════════════════════════════
+function navigate(tab) {
+  if (tab === 'more') { renderMoreScreen(); return; }
+  currentTab = tab;
+  detailAccId = null;
+  document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+  document.getElementById('nav-'+tab)?.classList.add('active');
+  renderScreen();
+}
+
+function renderScreen() {
+  if (detailAccId !== null) { renderAccountDetail(); return; }
+  switch(currentTab) {
+    case 'transactions': renderTransactions(); break;
+    case 'stats': renderStats(); break;
+    case 'accounts': renderAccounts(); break;
+    case 'more': renderMoreScreen(); break;
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+//  TRANSACTIONS SCREEN
+// ═══════════════════════════════════════════════════════
+function renderTransactions() {
+  const { income, expense } = getMonthTotals(currentMonth);
+  const total = income - expense;
+  const txs = getMonthlyTxs(currentMonth);
+
+  // Group by date descending
+  const byDate = {};
+  txs.forEach(t => {
+    if (!byDate[t.date]) byDate[t.date] = [];
+    byDate[t.date].push(t);
+  });
+  const days = Object.keys(byDate).sort((a,b)=>b.localeCompare(a));
+
+  let html = `
+    <div class="app-bar">
+      <div class="month-nav">
+        <button class="icon-btn" onclick="prevMonth()">&#8249;</button>
+        <span>${fmtMonthYear(currentMonth)}</span>
+        <button class="icon-btn" onclick="nextMonth()">&#8250;</button>
+      </div>
+      <div style="flex:1"></div>
+      <button class="icon-btn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      </button>
+    </div>
+    <div class="summary-bar">
+      <div class="summary-item">
+        <span class="s-label">Income</span>
+        <span class="s-amount income-color">${fmtCurrency(income)}</span>
+      </div>
+      <div class="s-divider"></div>
+      <div class="summary-item">
+        <span class="s-label">Expenses</span>
+        <span class="s-amount expense-color">${fmtCurrency(expense)}</span>
+      </div>
+      <div class="s-divider"></div>
+      <div class="summary-item">
+        <span class="s-label">Total</span>
+        <span class="s-amount" style="color:${total>=0?'var(--blue)':'var(--red)'}">${fmtCurrency(total)}</span>
+      </div>
+    </div>
+    <div class="screen-content" id="tx-list">`;
+
+  if (days.length === 0) {
+    html += `<div class="empty-state"><div class="empty-icon">📋</div><div>No transactions this month</div><div style="font-size:13px">Tap + to add one</div></div>`;
+  } else {
+    days.forEach(date => {
+      const dayTxs = byDate[date].sort((a,b)=>b.id-a.id);
+      const {day,dow,month,year} = fmtDay(date);
+      const dayIncome = dayTxs.filter(t=>t.type==='INCOME').reduce((s,t)=>s+t.amount,0);
+      const dayExpense = dayTxs.filter(t=>t.type==='EXPENSE').reduce((s,t)=>s+t.amount,0);
+      html += `<div class="day-header">
+        <div class="day-left">
+          <span class="day-num">${day}</span>
+          <span class="day-badge">${dow}</span>
+          <span class="day-date">${String(month).padStart(2,'0')}.${year}</span>
+        </div>
+        <div class="day-amounts">
+          ${dayIncome>0?`<span class="income-color">${fmtCurrency(dayIncome)}</span>`:''}
+          ${dayExpense>0?`<span class="expense-color">${fmtCurrency(dayExpense)}</span>`:''}
+        </div>
+      </div>`;
+      dayTxs.forEach(t => { html += renderTxRow(t, () => openTxModal(t.id)); });
+    });
+  }
+  html += `</div>`;
+
+  const root = document.getElementById('screen-root');
+  root.innerHTML = html;
+  root.style.position = 'relative';
+
+  // FAB
+  const fab = document.createElement('button');
+  fab.className = 'fab'; fab.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>';
+  fab.onclick = () => openTxModal(null);
+  root.appendChild(fab);
+
+  // Attach tx row click handlers
+  root.querySelectorAll('.tx-row').forEach(row => {
+    row.onclick = () => openTxModal(+row.dataset.txid);
+  });
+}
+
+function renderTxRow(t, onClick) {
+  const cat = getCategoryById(t.categoryId);
+  const acc = getAccountById(t.accountId);
+  const toAcc = t.toAccountId ? getAccountById(t.toAccountId) : null;
+  const isIncome = t.type === 'INCOME';
+  const isTransfer = t.type === 'TRANSFER';
+  const color = cat ? cat.color : (isTransfer ? '#9C27B0' : '#9E9E9E');
+  const icon = cat ? cat.icon : (isTransfer ? '↔️' : '•••');
+  const name = isTransfer ? 'Transfer' : (cat ? cat.name : 'Uncategorized');
+  const sub = isTransfer
+    ? `${acc?.name||'?'} → ${toAcc?.name||'?'}`
+    : (acc?.name || '');
+  const amtColor = isIncome ? 'var(--blue)' : (isTransfer ? 'var(--text)' : 'var(--red)');
+
+  return `<div class="tx-row" data-txid="${t.id}">
+    <div class="tx-icon" style="background:${color}20;color:${color}">${icon}</div>
+    <div class="tx-info">
+      <div class="tx-name">${name}</div>
+      <div class="tx-sub">${sub}${t.note?' · '+t.note:''}</div>
+    </div>
+    <div class="tx-amount" style="color:${amtColor}">${fmtCurrency(t.amount)}</div>
+  </div>`;
+}
+
+function prevMonth() {
+  const [y,m] = currentMonth.split('-').map(Number);
+  const d = new Date(y, m-2, 1);
+  currentMonth = monthKey(d);
+  renderScreen();
+}
+function nextMonth() {
+  const [y,m] = currentMonth.split('-').map(Number);
+  const d = new Date(y, m, 1);
+  currentMonth = monthKey(d);
+  renderScreen();
+}
+
+// ═══════════════════════════════════════════════════════
+//  STATS SCREEN
+// ═══════════════════════════════════════════════════════
+function renderStats() {
+  const { income, expense } = getMonthTotals(currentMonth);
+
+  // Build the list for the pie chart.  Qualifying transfers count here too:
+  // showing expenses → include Spending→Restricted transfers (no category)
+  // showing income   → include Restricted→Spending transfers (no category)
+  const allTxs = getMonthlyTxs(currentMonth);
+  const txs = allTxs.filter(t => {
+    if (!t.affectsMainBalance) return false;
+    if (t.type === 'EXPENSE') return statsShowExpense;
+    if (t.type === 'INCOME')  return !statsShowExpense;
+    if (t.type === 'TRANSFER') {
+      const fromGrp = getGroupById(getAccountById(t.accountId)?.groupId);
+      const isFromRestricted = fromGrp && isRestricted(fromGrp.type);
+      // Restricted→Spending = income side; Spending→Restricted = expense side
+      return statsShowExpense ? !isFromRestricted : isFromRestricted;
+    }
+    return false;
+  });
+  const total = txs.reduce((s,t)=>s+t.amount,0);
+
+  const byCat = {};
+  txs.forEach(t => {
+    const k = t.type === 'TRANSFER' ? 'transfer' : (t.categoryId || 0);
+    byCat[k] = (byCat[k]||0) + t.amount;
+  });
+  const stats = Object.entries(byCat)
+    .map(([catKey, amt]) => {
+      const isTransfer = catKey === 'transfer';
+      return {
+        cat: isTransfer ? { name:'Transfer', icon:'↔️', color:'#9C27B0' } : getCategoryById(+catKey),
+        amount: amt,
+        pct: total > 0 ? (amt / total * 100) : 0
+      };
+    })
+    .sort((a,b)=>b.amount-a.amount);
+
+  let html = `
+    <div class="app-bar">
+      <div class="month-nav">
+        <button class="icon-btn" onclick="prevMonth()">&#8249;</button>
+        <span>${fmtMonthYear(currentMonth)}</span>
+        <button class="icon-btn" onclick="nextMonth()">&#8250;</button>
+      </div>
+      <div style="flex:1"></div>
+    </div>
+    <div style="background:var(--surface);display:flex;padding:8px 16px;border-bottom:1px solid var(--divider);">
+      <span style="font-size:13px;color:var(--text2)">Income ${fmtCurrency(income)}</span>
+      <span style="flex:1"></span>
+      <span style="font-size:13px;font-weight:600">Expenses ${fmtCurrency(expense)}</span>
+    </div>
+    <div class="stats-mode-bar">
+      <button class="stats-mode-btn ${statsShowExpense?'active':''}" onclick="statsMode(true)">Expenses</button>
+      <button class="stats-mode-btn ${!statsShowExpense?'active':''}" onclick="statsMode(false)">Income</button>
+    </div>
+    <div class="screen-content">
+      <div class="chart-area">
+        <canvas id="pie-chart" width="200" height="200"></canvas>
+      </div>`;
+
+  if (stats.length === 0) {
+    html += `<div class="empty-state"><div>No data for this period</div></div>`;
+  } else {
+    stats.forEach((s,i) => {
+      const color = s.cat ? s.cat.color : CHART_COLORS[i%CHART_COLORS.length];
+      html += `<div class="cat-stat-row">
+        <div class="cat-pct-box" style="background:${color}">${Math.round(s.pct)}%</div>
+        <div class="cat-stat-name">${s.cat?s.cat.icon+' '+s.cat.name:'Uncategorized'}</div>
+        <div class="cat-stat-amount">${fmtCurrency(s.amount)}</div>
+      </div>`;
+    });
+  }
+  html += `</div>`;
+
+  document.getElementById('screen-root').innerHTML = html;
+
+  // Draw pie chart
+  if (stats.length > 0) {
+    setTimeout(() => {
+      const canvas = document.getElementById('pie-chart');
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+      const cx = 100, cy = 100, r = 90;
+      let angle = -Math.PI / 2;
+      stats.forEach((s,i) => {
+        const slice = (s.pct / 100) * Math.PI * 2;
+        const color = s.cat ? s.cat.color : CHART_COLORS[i % CHART_COLORS.length];
+        ctx.beginPath();
+        ctx.moveTo(cx, cy);
+        ctx.arc(cx, cy, r, angle, angle + slice);
+        ctx.closePath();
+        ctx.fillStyle = color;
+        ctx.fill();
+        angle += slice;
+      });
+    }, 10);
+  }
+}
+
+function statsMode(showExpense) {
+  statsShowExpense = showExpense;
+  renderStats();
+}
+
+// ═══════════════════════════════════════════════════════
+//  ACCOUNTS SCREEN
+// ═══════════════════════════════════════════════════════
+function renderAccounts() {
+  let totalAssets = 0, totalLiabilities = 0;
+  const grouped = db.accountGroups.map(g => {
+    const accs = db.accounts.filter(a=>a.groupId===g.id);
+    const accBals = accs.map(a => ({ acc:a, bal:getAccountBalance(a.id) }));
+    const groupTotal = accBals.reduce((s,ab)=>s+ab.bal, 0);
+    if (isLiability(g.type)) totalLiabilities += Math.abs(groupTotal);
+    else totalAssets += Math.max(groupTotal, 0);
+    return { group:g, accBals, groupTotal };
+  }).filter(g=>g.accBals.length>0);
+
+  let html = `
+    <div class="app-bar">
+      <span class="title">Accounts</span>
+      <button class="icon-btn" onclick="openAccModal(null)" title="Add Account">＋</button>
+      <button class="icon-btn" onclick="openGroupModal()" title="Add Group">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/><line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/></svg>
+      </button>
+    </div>
+    <div class="net-worth-bar" style="height:auto;">
+      <div class="nw-item">
+        <span class="nw-label">Assets</span>
+        <span class="nw-value income-color">${fmtCurrency(totalAssets)}</span>
+      </div>
+      <div class="s-divider"></div>
+      <div class="nw-item">
+        <span class="nw-label">Liabilities</span>
+        <span class="nw-value expense-color">${fmtCurrency(totalLiabilities)}</span>
+      </div>
+      <div class="s-divider"></div>
+      <div class="nw-item">
+        <span class="nw-label">Total</span>
+        <span class="nw-value">${fmtCurrency(totalAssets-totalLiabilities)}</span>
+      </div>
+    </div>
+    <div class="screen-content">`;
+
+  if (grouped.length === 0) {
+    html += `<div class="empty-state"><div class="empty-icon">🏦</div><div>No accounts yet</div><div style="font-size:13px">Tap + to add an account</div></div>`;
+  }
+
+  grouped.forEach(({group, accBals, groupTotal}) => {
+    const isLiab = isLiability(group.type);
+    html += `<div style="margin-top:8px;">
+      <div class="group-header">
+        <span class="group-name">${group.name}</span>
+        <span style="flex:1"></span>
+        <span class="group-total" style="color:${isLiab?'var(--red)':'var(--blue)'};margin-right:4px">${fmtCurrency(groupTotal)}</span>
+        <button class="group-del-btn" onclick="confirmDeleteGroup(${group.id},'${group.name.replace(/'/g,"\\'")}',${accBals.length})" title="Delete group">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" width="14" height="14"><polyline points="3,6 5,6 21,6"/><path d="M19,6l-1,14H6L5,6"/><path d="M10,11v6M14,11v6"/><path d="M9,6V4h6v2"/></svg>
+        </button>
+      </div>`;
+    accBals.forEach(({acc,bal}) => {
+      html += `<div class="acc-row" data-accid="${acc.id}">
+        <span class="acc-name">${acc.name}</span>
+        <span class="acc-balance" style="color:${bal<0?'var(--red)':'var(--blue)'}">${fmtCurrency(bal)}</span>
+        <button class="acc-menu-btn" data-menuid="${acc.id}" onclick="toggleAccMenu(event,${acc.id})">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="5" r="1" fill="currentColor"/><circle cx="12" cy="12" r="1" fill="currentColor"/><circle cx="12" cy="19" r="1" fill="currentColor"/></svg>
+        </button>
+      </div>
+      <div class="acc-actions" id="acc-actions-${acc.id}">
+        <button class="acc-action-btn edit" onclick="openAccModal(${acc.id})">✏️ Edit</button>
+        <button class="acc-action-btn del" onclick="confirmDeleteAcc(${acc.id},'${acc.name.replace(/'/g,"\\'")}')">🗑 Delete</button>
+      </div>`;
+    });
+    html += `</div>`;
+  });
+  html += `</div>`;
+
+  const root = document.getElementById('screen-root');
+  root.innerHTML = html;
+
+  root.querySelectorAll('.acc-row').forEach(row => {
+    row.onclick = (e) => {
+      if (e.target.closest('.acc-menu-btn')) return;
+      closeAllAccMenus();
+      openAccountDetail(+row.dataset.accid);
+    };
+  });
+}
+
+// ═══════════════════════════════════════════════════════
+//  ACCOUNT DETAIL SCREEN
+// ═══════════════════════════════════════════════════════
+function openAccountDetail(accId) {
+  detailAccId = accId;
+  document.querySelectorAll('.nav-item').forEach(el=>el.classList.remove('active'));
+  document.getElementById('nav-accounts')?.classList.add('active');
+  renderAccountDetail();
+}
+
+function renderAccountDetail() {
+  const acc = getAccountById(detailAccId);
+  if (!acc) { detailAccId=null; renderAccounts(); return; }
+  const bal = getAccountBalance(detailAccId);
+  const txs = getMonthlyTxs(currentMonth, detailAccId);
+  const income = txs.filter(t=>t.type==='INCOME'&&t.accountId===detailAccId).reduce((s,t)=>s+t.amount,0);
+  const expense = txs.filter(t=>t.type==='EXPENSE'&&t.accountId===detailAccId).reduce((s,t)=>s+t.amount,0);
+  const total = income - expense;
+
+  const byDate = {};
+  txs.forEach(t => { if(!byDate[t.date]) byDate[t.date]=[]; byDate[t.date].push(t); });
+  const days = Object.keys(byDate).sort((a,b)=>b.localeCompare(a));
+
+  let html = `
+    <div class="back-header">
+      <button class="icon-btn" onclick="backFromDetail()">&#8592;</button>
+      <div class="bh-info">
+        <div class="bh-name">${acc.name}</div>
+        <div class="bh-balance" style="color:${bal>=0?'var(--blue)':'var(--red)'}">${fmtCurrency(bal)}</div>
+      </div>
+      <button class="icon-btn" onclick="prevMonth();renderAccountDetail()">&#8249;</button>
+      <span style="font-size:13px;font-weight:600;padding:0 4px;">${fmtMonthYear(currentMonth)}</span>
+      <button class="icon-btn" onclick="nextMonth();renderAccountDetail()">&#8250;</button>
+    </div>
+    <div class="summary-bar">
+      <div class="summary-item"><span class="s-label">Income</span><span class="s-amount income-color">${fmtCurrency(income)}</span></div>
+      <div class="s-divider"></div>
+      <div class="summary-item"><span class="s-label">Expenses</span><span class="s-amount expense-color">${fmtCurrency(expense)}</span></div>
+      <div class="s-divider"></div>
+      <div class="summary-item"><span class="s-label">Total</span><span class="s-amount" style="color:${total>=0?'var(--blue)':'var(--red)'}">${fmtCurrency(total)}</span></div>
+    </div>
+    <div class="screen-content" id="detail-tx-list">`;
+
+  if (days.length === 0) {
+    html += `<div class="empty-state"><div class="empty-icon">📋</div><div>No transactions this month</div></div>`;
+  } else {
+    days.forEach(date => {
+      const dayTxs = byDate[date].sort((a,b)=>b.id-a.id);
+      const {day,dow,month,year} = fmtDay(date);
+      const dayIncome = dayTxs.filter(t=>t.type==='INCOME').reduce((s,t)=>s+t.amount,0);
+      const dayExpense = dayTxs.filter(t=>t.type==='EXPENSE').reduce((s,t)=>s+t.amount,0);
+      html += `<div class="day-header">
+        <div class="day-left">
+          <span class="day-num">${day}</span>
+          <span class="day-badge">${dow}</span>
+          <span class="day-date">${String(month).padStart(2,'0')}.${year}</span>
+        </div>
+        <div class="day-amounts">
+          ${dayIncome>0?`<span class="income-color">${fmtCurrency(dayIncome)}</span>`:''}
+          ${dayExpense>0?`<span class="expense-color">${fmtCurrency(dayExpense)}</span>`:''}
+        </div>
+      </div>`;
+      dayTxs.forEach(t => { html += renderTxRow(t); });
+    });
+  }
+  html += `</div>`;
+
+  const root = document.getElementById('screen-root');
+  root.innerHTML = html;
+  root.style.position = 'relative';
+
+  const fab = document.createElement('button');
+  fab.className='fab'; fab.innerHTML='+';
+  fab.onclick = () => openTxModal(null, detailAccId);
+  root.appendChild(fab);
+
+  root.querySelectorAll('.tx-row').forEach(row => {
+    row.onclick = () => openTxModal(+row.dataset.txid);
+  });
+}
+
+function backFromDetail() {
+  detailAccId = null;
+  renderAccounts();
+}
+
+// ═══════════════════════════════════════════════════════
+//  MORE / SETTINGS SCREEN
+// ═══════════════════════════════════════════════════════
+function renderMoreScreen() {
+  currentTab = 'more';
+  document.querySelectorAll('.nav-item').forEach(el=>el.classList.remove('active'));
+  document.getElementById('nav-more')?.classList.add('active');
+
+  const ico = (path, vb='0 0 24 24') =>
+    `<svg viewBox="${vb}" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="20" height="20">${path}</svg>`;
+
+  document.getElementById('screen-root').innerHTML = `
+    <div class="app-bar"><span class="title">More</span></div>
+    <div class="screen-content">
+      <div class="setting-section">
+        <div style="padding:14px 16px 6px;font-size:11px;color:var(--text2);font-weight:700;text-transform:uppercase;letter-spacing:.7px;">Manage</div>
+        <div class="setting-item" onclick="renderCategoryManager()">
+          <span class="si-icon" style="color:var(--purple)">${ico('<path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/>')}</span>
+          <span class="si-label">Categories</span>
+          <span style="font-size:11px;color:var(--text3);margin-right:8px;">${db.categories.length}</span>
+          <span class="si-arrow">${ico('<polyline points="9,18 15,12 9,6"/>')}</span>
+        </div>
+        <div class="setting-item" onclick="renderGroupManager()">
+          <span class="si-icon" style="color:var(--blue)">${ico('<path d="M3 3h6v6H3zM15 3h6v6h-6zM3 15h6v6H3zM15 15h6v6h-6z"/>')}</span>
+          <span class="si-label">Account Groups</span>
+          <span style="font-size:11px;color:var(--text3);margin-right:8px;">${db.accountGroups.length}</span>
+          <span class="si-arrow">${ico('<polyline points="9,18 15,12 9,6"/>')}</span>
+        </div>
+      </div>
+      <div class="setting-section">
+        <div style="padding:14px 16px 6px;font-size:11px;color:var(--text2);font-weight:700;text-transform:uppercase;letter-spacing:.7px;">Data</div>
+        <div class="setting-item" onclick="exportData()">
+          <span class="si-icon" style="color:var(--green)">${ico('<path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7,10 12,15 17,10"/><line x1="12" y1="15" x2="12" y2="3"/>')}</span>
+          <span class="si-label">Export Backup</span>
+          <span class="si-arrow">${ico('<polyline points="9,18 15,12 9,6"/>')}</span>
+        </div>
+        <div class="setting-item" onclick="document.getElementById('import-input').click()">
+          <span class="si-icon" style="color:var(--blue)">${ico('<path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17,8 12,3 7,8"/><line x1="12" y1="3" x2="12" y2="15"/>')}</span>
+          <span class="si-label">Import Backup</span>
+          <span class="si-arrow">${ico('<polyline points="9,18 15,12 9,6"/>')}</span>
+        </div>
+        <div class="setting-item" onclick="confirmClearData()">
+          <span class="si-icon" style="color:var(--red)">${ico('<polyline points="3,6 5,6 21,6"/><path d="M19,6l-1,14H6L5,6"/><path d="M10,11v6M14,11v6"/><path d="M9,6V4h6v2"/>')}</span>
+          <span class="si-label" style="color:var(--red)">Clear All Data</span>
+          <span class="si-arrow" style="color:var(--red)">${ico('<polyline points="9,18 15,12 9,6"/>')}</span>
+        </div>
+      </div>
+      <div style="padding:28px 16px;text-align:center;color:var(--text3);font-size:12px;">
+        ExpenseIQ · Data in browser localStorage
+      </div>
+    </div>
+    <input type="file" id="import-input" accept=".json" style="display:none" onchange="importData(event)">
+  `;
+}
+
+function renderCategoryManager() {
+  let html = `
+    <div class="app-bar">
+      <button class="icon-btn" onclick="renderMoreScreen()">&#8592;</button>
+      <span class="title">Categories</span>
+      <button class="icon-btn" onclick="openCatModal(null)">＋</button>
+    </div>
+    <div class="screen-content">`;
+
+  ['EXPENSE','INCOME'].forEach(type => {
+    const cats = db.categories.filter(c=>c.type===type);
+    html += `<div style="padding:10px 16px 4px;font-size:12px;color:var(--text2);font-weight:600;text-transform:uppercase;">${type}</div>`;
+    cats.forEach(c => {
+      html += `<div class="setting-item" onclick="openCatModal(${c.id})">
+        <span class="si-icon">${c.icon}</span>
+        <span class="si-label">${c.name}</span>
+        <span class="si-arrow">›</span>
+      </div>`;
+    });
+  });
+  html += `</div>`;
+  document.getElementById('screen-root').innerHTML = html;
+}
+
+function renderGroupManager() {
+  let html = `
+    <div class="app-bar">
+      <button class="icon-btn" onclick="renderMoreScreen()">&#8592;</button>
+      <span class="title">Account Groups</span>
+      <button class="icon-btn" onclick="openGroupModal()">＋</button>
+    </div>
+    <div class="screen-content">`;
+
+  db.accountGroups.forEach(g => {
+    const accCount = db.accounts.filter(a=>a.groupId===g.id).length;
+    html += `<div class="setting-item">
+      <span class="si-icon" style="font-size:16px;color:var(--blue)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" width="20" height="20"><path d="M3 3h6v6H3zM15 3h6v6h-6zM3 15h6v6H3zM15 15h6v6h-6z"/></svg>
+      </span>
+      <span class="si-label">${g.name}</span>
+      <span style="font-size:11px;color:var(--text2);background:var(--bg);padding:2px 8px;border-radius:8px;margin-right:6px;">${typeLabelOf(g.type)}</span>
+      <span style="font-size:11px;color:var(--text3);margin-right:8px;">${accCount} acc${accCount!==1?'s':''}</span>
+      <button class="icon-btn" style="color:var(--text3);width:32px;height:32px;" onclick="confirmDeleteGroup(${g.id},'${g.name.replace(/'/g,"\\'")}',${accCount})"
+        onmouseover="this.style.color='var(--red)'" onmouseout="this.style.color='var(--text3)'">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" width="16" height="16"><polyline points="3,6 5,6 21,6"/><path d="M19,6l-1,14H6L5,6"/><path d="M9,6V4h6v2"/></svg>
+      </button>
+    </div>`;
+  });
+  html += `</div>`;
+  document.getElementById('screen-root').innerHTML = html;
+}
+
+function typeLabelOf(type) {
+  return { LIQUID_SAVINGS:'Liquid Savings', INVESTMENTS:'Investments', LOAN:'Loan', OTHERS:'Others',
+           WALLET:'Others', SPENDING:'Others', CREDIT_CARD:'Others', OTHER:'Others' }[type] || 'Others';
+}
+function groupTypeColor(type) {
+  return { LIQUID_SAVINGS:'#4CAF50', INVESTMENTS:'#2196F3', LOAN:'#F44336', OTHERS:'#607D8B' }[normalizeType(type)] || '#9E9E9E';
+}
+
+// ═══════════════════════════════════════════════════════
+//  TRANSACTION MODAL
+// ═══════════════════════════════════════════════════════
+function openTxModal(txId, defaultAccId=null) {
+  editTxId = txId;
+  defaultTxAccId = defaultAccId || detailAccId;
+
+  const modal = document.getElementById('tx-modal');
+  const tx = txId ? db.transactions.find(t=>t.id===txId) : null;
+
+  txType = tx ? tx.type : 'EXPENSE';
+  txSelAccId = tx ? tx.accountId : (defaultTxAccId || db.accounts[0]?.id || null);
+  txSelToAccId = tx ? tx.toAccountId : null;
+  txSelCatId = tx ? tx.categoryId : null;
+
+  document.getElementById('tx-modal-title').textContent = tx ? 'Edit Transaction' : 'Add Transaction';
+  document.getElementById('tx-amount').value = tx ? tx.amount : '';
+  document.getElementById('tx-date').value = tx ? tx.date : todayISO();
+  document.getElementById('tx-note').value = tx ? tx.note : '';
+  document.getElementById('delete-tx-btn').style.display = tx ? 'block' : 'none';
+
+  updateTxTypeUI();
+  buildAccountPills('tx-account-pills', 'txSelAccId', null, (id) => { txSelAccId=id; buildAccountPills('tx-account-pills','txSelAccId',null,(i)=>{txSelAccId=i;buildToAccountPills();}); buildToAccountPills(); });
+  buildToAccountPills();
+  buildCatGrid();
+  modal.classList.add('open');
+}
+
+function updateTxTypeUI() {
+  ['income','expense','transfer'].forEach(t => {
+    document.getElementById('btn-'+t).className = 'type-btn';
+  });
+  const key = txType.toLowerCase();
+  document.getElementById('btn-'+key).classList.add('active-'+key);
+  document.getElementById('to-account-section').style.display = txType==='TRANSFER' ? 'block' : 'none';
+  document.getElementById('category-section').style.display = txType==='TRANSFER' ? 'none' : 'block';
+  buildAccountPills('tx-account-pills', 'txSelAccId', null, (id) => { txSelAccId=id; buildToAccountPills(); buildCatGrid(); });
+  buildToAccountPills();
+  buildCatGrid();
+}
+
+function setTxType(t) { txType=t; updateTxTypeUI(); }
+
+function buildAccountPills(containerId, selVarName, exclude, onSelect) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  container.innerHTML = '';
+  db.accounts.forEach(acc => {
+    if (exclude && acc.id === exclude) return;
+    const pill = document.createElement('button');
+    pill.className = 'pill' + (txSelAccId===acc.id ? ' selected' : '');
+    pill.textContent = acc.name;
+    pill.onclick = () => { txSelAccId = acc.id; onSelect && onSelect(acc.id); buildAccountPills(containerId, selVarName, exclude, onSelect); };
+    container.appendChild(pill);
+  });
+}
+
+function buildToAccountPills() {
+  const container = document.getElementById('tx-to-account-pills');
+  if (!container) return;
+  container.innerHTML = '';
+  db.accounts.forEach(acc => {
+    if (acc.id === txSelAccId) return;
+    const pill = document.createElement('button');
+    pill.className = 'pill' + (txSelToAccId===acc.id ? ' selected' : '');
+    pill.textContent = acc.name;
+    pill.onclick = () => { txSelToAccId=acc.id; buildToAccountPills(); };
+    container.appendChild(pill);
+  });
+}
+
+function buildCatGrid() {
+  const grid = document.getElementById('cat-grid');
+  if (!grid) return;
+  const cats = db.categories.filter(c=>c.type===txType);
+  grid.innerHTML = '';
+  cats.forEach(cat => {
+    const item = document.createElement('div');
+    item.className = 'cat-item' + (txSelCatId===cat.id ? ' selected' : '');
+    item.style.setProperty('--selected-color', cat.color);
+    item.style.setProperty('--selected-bg', cat.color+'22');
+    item.innerHTML = `<span class="ci-icon">${cat.icon}</span><span class="ci-name">${cat.name}</span>`;
+    item.onclick = () => { txSelCatId=cat.id; buildCatGrid(); };
+    grid.appendChild(item);
+  });
+}
+
+function closeTxModal() { document.getElementById('tx-modal').classList.remove('open'); }
+
+function saveTx() {
+  const amt = parseFloat(document.getElementById('tx-amount').value);
+  if (isNaN(amt) || amt <= 0) { showToast('Enter a valid amount'); return; }
+  if (!txSelAccId) { showToast('Select an account'); return; }
+  if (txType==='TRANSFER' && !txSelToAccId) { showToast('Select a destination account'); return; }
+
+  const tx = {
+    id: editTxId || nextId(),
+    date: document.getElementById('tx-date').value || todayISO(),
+    amount: amt,
+    type: txType,
+    categoryId: txType!=='TRANSFER' ? txSelCatId : null,
+    accountId: txSelAccId,
+    toAccountId: txType==='TRANSFER' ? txSelToAccId : null,
+    note: document.getElementById('tx-note').value.trim(),
+    affectsMainBalance: true
+  };
+  tx.affectsMainBalance = computeAffectsBalance(tx);
+
+  if (editTxId) {
+    const idx = db.transactions.findIndex(t=>t.id===editTxId);
+    if (idx >= 0) db.transactions[idx] = tx;
+  } else {
+    db.transactions.push(tx);
+  }
+  saveDb();
+  closeTxModal();
+  renderScreen();
+  showToast(editTxId ? 'Transaction updated' : 'Transaction added');
+}
+
+function deleteTx() {
+  showConfirm('Delete Transaction?', 'This cannot be undone.', () => {
+    db.transactions = db.transactions.filter(t=>t.id!==editTxId);
+    saveDb();
+    closeTxModal();
+    renderScreen();
+    showToast('Transaction deleted');
+  });
+}
+
+// ═══════════════════════════════════════════════════════
+//  ACCOUNT MODAL
+// ═══════════════════════════════════════════════════════
+function openAccModal(accId) {
+  editAccId = accId;
+  const acc = accId ? getAccountById(accId) : null;
+  document.getElementById('acc-modal-title').textContent = acc ? 'Edit Account' : 'Add Account';
+  document.getElementById('acc-name').value = acc ? acc.name : '';
+  document.getElementById('acc-default-bal').value = acc ? acc.defaultBalance : '';
+  document.getElementById('delete-acc-btn').style.display = acc ? 'block' : 'none';
+
+  const sel = document.getElementById('acc-group');
+  sel.innerHTML = db.accountGroups.map(g => `<option value="${g.id}" ${acc&&acc.groupId===g.id?'selected':''}>${g.name}</option>`).join('');
+
+  document.getElementById('acc-modal').classList.add('open');
+}
+
+function closeAccModal() { document.getElementById('acc-modal').classList.remove('open'); }
+
+function saveAccount() {
+  const name = document.getElementById('acc-name').value.trim();
+  if (!name) { showToast('Enter account name'); return; }
+  const groupId = +document.getElementById('acc-group').value;
+  const defaultBalance = parseFloat(document.getElementById('acc-default-bal').value) || 0;
+
+  if (editAccId) {
+    const idx = db.accounts.findIndex(a=>a.id===editAccId);
+    if (idx>=0) db.accounts[idx] = { ...db.accounts[idx], name, groupId, defaultBalance };
+  } else {
+    db.accounts.push({ id:nextId(), name, groupId, defaultBalance });
+  }
+  saveDb();
+  closeAccModal();
+  renderAccounts();
+  showToast(editAccId ? 'Account updated' : 'Account added');
+}
+
+function deleteAccount() {
+  showConfirm('Delete Account?', 'All transactions for this account will also be deleted.', () => {
+    db.transactions = db.transactions.filter(t=>t.accountId!==editAccId && t.toAccountId!==editAccId);
+    db.accounts = db.accounts.filter(a=>a.id!==editAccId);
+    saveDb();
+    closeAccModal();
+    renderAccounts();
+    showToast('Account deleted');
+  });
+}
+
+// ═══════════════════════════════════════════════════════
+//  GROUP MODAL
+// ═══════════════════════════════════════════════════════
+function openGroupModal() { document.getElementById('group-modal').classList.add('open'); }
+
+function saveGroup() {
+  const name = document.getElementById('group-name').value.trim();
+  if (!name) { showToast('Enter group name'); return; }
+  const type = document.getElementById('group-type').value;
+  db.accountGroups.push({ id:nextId(), name, type, isSystem:false });
+  saveDb();
+  document.getElementById('group-modal').classList.remove('open');
+  document.getElementById('group-name').value = '';
+  renderScreen();
+  showToast('Group added');
+}
+
+// ── Account row ⋮ menu ──────────────────────────────────
+function toggleAccMenu(e, accId) {
+  e.stopPropagation();
+  const panel = document.getElementById('acc-actions-' + accId);
+  const isOpen = panel.classList.contains('open');
+  closeAllAccMenus();
+  if (!isOpen) panel.classList.add('open');
+}
+function closeAllAccMenus() {
+  document.querySelectorAll('.acc-actions.open').forEach(el => el.classList.remove('open'));
+}
+function confirmDeleteAcc(accId, name) {
+  closeAllAccMenus();
+  editAccId = accId;
+  showConfirm(`Delete "${name}"?`,
+    'All transactions for this account will also be deleted.',
+    () => {
+      db.transactions = db.transactions.filter(t=>t.accountId!==accId && t.toAccountId!==accId);
+      db.accounts = db.accounts.filter(a=>a.id!==accId);
+      saveDb(); renderAccounts(); showToast('Account deleted');
+    }
+  );
+}
+function confirmDeleteGroup(id, name, accCount) {
+  const msg = accCount > 0
+    ? `This group has ${accCount} account${accCount!==1?'s':''} which will also be deleted along with all their transactions.`
+    : 'This group will be removed.';
+  showConfirm(`Delete "${name}"?`, msg, () => {
+    const accIds = db.accounts.filter(a=>a.groupId===id).map(a=>a.id);
+    db.transactions = db.transactions.filter(t=>!accIds.includes(t.accountId) && !accIds.includes(t.toAccountId));
+    db.accounts = db.accounts.filter(a=>a.groupId!==id);
+    db.accountGroups = db.accountGroups.filter(g=>g.id!==id);
+    saveDb();
+    const inGroupManager = document.querySelector('.title')?.textContent === 'Account Groups';
+    if (inGroupManager) renderGroupManager(); else renderAccounts();
+    showToast('Group deleted');
+  });
+}
+
+function deleteGroup(id) {
+  const hasAccs = db.accounts.some(a=>a.groupId===id);
+  if (hasAccs) { showToast('Remove accounts from this group first'); return; }
+  showConfirm('Delete Group?', 'This group will be removed.', () => {
+    db.accountGroups = db.accountGroups.filter(g=>g.id!==id);
+    saveDb();
+    renderGroupManager();
+    showToast('Group deleted');
+  });
+}
+
+// ═══════════════════════════════════════════════════════
+//  CATEGORY MODAL
+// ═══════════════════════════════════════════════════════
+function openCatModal(catId) {
+  editCatId = catId;
+  const cat = catId ? getCategoryById(catId) : null;
+  document.getElementById('cat-modal-title').textContent = cat ? 'Edit Category' : 'Add Category';
+  document.getElementById('cat-name').value = cat ? cat.name : '';
+  document.getElementById('cat-type').value = cat ? cat.type : 'EXPENSE';
+  document.getElementById('cat-icon').value = cat ? cat.icon : '🏷️';
+  document.getElementById('cat-color').value = cat ? rgbToHex(cat.color) : '#4CAF50';
+  document.getElementById('delete-cat-btn').style.display = cat && !cat.isSystem ? 'block' : 'none';
+  document.getElementById('cat-modal').classList.add('open');
+}
+
+function saveCategory() {
+  const name = document.getElementById('cat-name').value.trim();
+  if (!name) { showToast('Enter category name'); return; }
+  const type = document.getElementById('cat-type').value;
+  const icon = document.getElementById('cat-icon').value.trim() || '🏷️';
+  const color = document.getElementById('cat-color').value;
+
+  if (editCatId) {
+    const idx = db.categories.findIndex(c=>c.id===editCatId);
+    if (idx>=0) db.categories[idx] = { ...db.categories[idx], name, type, icon, color };
+  } else {
+    db.categories.push({ id:nextId(), name, type, icon, color, isSystem:false });
+  }
+  saveDb();
+  document.getElementById('cat-modal').classList.remove('open');
+  renderCategoryManager();
+  showToast(editCatId ? 'Category updated' : 'Category added');
+}
+
+function deleteCategory() {
+  showConfirm('Delete Category?', 'Transactions using this category will become uncategorized.', () => {
+    db.transactions.forEach(t => { if(t.categoryId===editCatId) t.categoryId=null; });
+    db.categories = db.categories.filter(c=>c.id!==editCatId);
+    saveDb();
+    document.getElementById('cat-modal').classList.remove('open');
+    renderCategoryManager();
+    showToast('Category deleted');
+  });
+}
+
+function rgbToHex(color) {
+  if (color.startsWith('#')) return color;
+  return color;
+}
+
+// ═══════════════════════════════════════════════════════
+//  IMPORT / EXPORT
+// ═══════════════════════════════════════════════════════
+function exportData() {
+  const blob = new Blob([JSON.stringify(db, null, 2)], { type:'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `expenseiq-backup-${todayISO()}.json`;
+  a.click();
+  showToast('Backup exported');
+}
+
+function importData(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const imported = JSON.parse(e.target.result);
+      db = imported;
+      saveDb();
+      renderScreen();
+      showToast('Data imported successfully');
+    } catch { showToast('Invalid backup file'); }
+  };
+  reader.readAsText(file);
+}
+
+function confirmClearData() {
+  showConfirm('Clear All Data?', 'This will delete all transactions, accounts, and settings. This cannot be undone.', () => {
+    db = defaultData();
+    saveDb();
+    renderScreen();
+    showToast('All data cleared');
+  });
+}
+
+// ═══════════════════════════════════════════════════════
+//  CONFIRM DIALOG
+// ═══════════════════════════════════════════════════════
+let confirmCallback = null;
+function showConfirm(title, msg, onOk) {
+  document.getElementById('confirm-title').textContent = title;
+  document.getElementById('confirm-msg').textContent = msg;
+  confirmCallback = onOk;
+  document.getElementById('confirm-overlay').classList.add('open');
+  document.getElementById('confirm-ok').onclick = () => { hideConfirm(); confirmCallback?.(); };
+}
+function hideConfirm() { document.getElementById('confirm-overlay').classList.remove('open'); }
+
+// ═══════════════════════════════════════════════════════
+//  TOAST
+// ═══════════════════════════════════════════════════════
+let toastTimeout;
+function showToast(msg) {
+  const toast = document.getElementById('toast');
+  toast.textContent = msg;
+  toast.classList.add('show');
+  clearTimeout(toastTimeout);
+  toastTimeout = setTimeout(() => toast.classList.remove('show'), 2000);
+}
+
+// ═══════════════════════════════════════════════════════
+//  STATUS BAR CLOCK
+// ═══════════════════════════════════════════════════════
+function updateClock() {
+  const now = new Date();
+  const h = now.getHours(), m = String(now.getMinutes()).padStart(2,'0');
+  document.getElementById('status-time').textContent = `${h}:${m}`;
+}
+setInterval(updateClock, 10000);
+updateClock();
+
+// ═══════════════════════════════════════════════════════
+//  INIT
+// ═══════════════════════════════════════════════════════
+loadDb();
+renderScreen();
+</script>
+</body>
+</html>
