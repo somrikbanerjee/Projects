@@ -1,0 +1,101 @@
+{% extends "budget/base.html" %}
+{% load budget_filters %}
+{% block title %}Settings — BudgetIQ{% endblock %}
+
+{% block content %}
+<div class="row g-3 mb-3 align-items-center">
+  <div class="col">
+    <h4 class="mb-0 fw-bold">
+      <i class="bi bi-gear text-fin me-2"></i>Fixed Expense Settings
+    </h4>
+    <div class="text-muted" style="font-size:.82rem;">Configure rent and loan EMI defaults</div>
+  </div>
+  <div class="col-auto">
+    <a href="{% url 'dashboard' %}" class="btn btn-fin-outline btn-sm">
+      <i class="bi bi-arrow-left me-1"></i>Back
+    </a>
+  </div>
+</div>
+
+<div class="row justify-content-center">
+  <div class="col-md-7 col-lg-5">
+    <div class="card">
+      <div class="card-body p-4">
+
+        <!-- Current values summary -->
+        <div class="row g-2 mb-4">
+          <div class="col-6">
+            <div class="stat-pill text-center">
+              <div class="label">🏠 Rent</div>
+              <div class="value" style="font-size:1.3rem;">₹{{ settings.rent_amount|indian_number }}</div>
+              <div class="sub">per month</div>
+            </div>
+          </div>
+          <div class="col-6">
+            <div class="stat-pill text-center" style="background:rgba(248,81,73,.06);border-color:rgba(248,81,73,.2);">
+              <div class="label" style="color:var(--fin-danger);">🏦 Loan EMI</div>
+              <div class="value" style="font-size:1.3rem;color:var(--fin-danger);">₹{{ settings.emi_amount|indian_number }}</div>
+              <div class="sub">until {{ settings.emi_end_month }}/{{ settings.emi_end_year }}</div>
+            </div>
+          </div>
+        </div>
+
+        <form method="post">
+          {% csrf_token %}
+
+          <div class="mb-3">
+            <label class="form-label fw-semibold">{{ form.rent_amount.label }}</label>
+            {{ form.rent_amount }}
+            <div class="form-text text-muted" style="font-size:.78rem;">
+              This becomes the minimum floor for the Home category each month.
+            </div>
+          </div>
+
+          <hr/>
+
+          <div class="mb-3">
+            <label class="form-label fw-semibold">{{ form.emi_amount.label }}</label>
+            {{ form.emi_amount }}
+            <div class="form-text text-muted" style="font-size:.78rem;">
+              Deducted from total budget before splits are computed.
+            </div>
+          </div>
+
+          <div class="row g-2 mb-3">
+            <div class="col-6">
+              <label class="form-label">{{ form.emi_end_year.label }}</label>
+              {{ form.emi_end_year }}
+            </div>
+            <div class="col-6">
+              <label class="form-label">{{ form.emi_end_month.label }}</label>
+              {{ form.emi_end_month }}
+            </div>
+          </div>
+          <div class="form-text text-muted mb-3" style="font-size:.78rem;">
+            EMI is automatically removed from budgets after this month.
+          </div>
+
+          <hr/>
+
+          <!-- Investment rule summary (read-only) -->
+          <div class="mb-3 p-3 rounded" style="background:rgba(0,200,150,.07);border:1px solid rgba(0,200,150,.2);">
+            <div class="fw-semibold text-fin mb-1" style="font-size:.88rem;">
+              <i class="bi bi-graph-up me-1"></i>Investment (auto-escalating)
+            </div>
+            <div style="font-size:.82rem;color:var(--fin-text-soft);">
+              Currently <strong class="text-fin">₹{{ inv_amt|indian_number }}</strong>
+              if budget ≥ <strong class="text-fin">₹{{ inv_thresh|indian_number }}</strong>.
+              Escalates 10 % every April from Apr 2026.
+            </div>
+          </div>
+
+          <button type="submit" class="btn btn-gold w-100">
+            <i class="bi bi-check-lg me-1"></i>Save Settings
+          </button>
+        </form>
+
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

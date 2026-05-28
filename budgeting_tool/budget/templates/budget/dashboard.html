@@ -1,0 +1,428 @@
+{% extends "budget/base.html" %}
+{% load budget_filters %}
+{% block title %}Dashboard — BudgetIQ{% endblock %}
+{% block nav_dashboard %}active{% endblock %}
+
+{% block content %}
+<div class="row g-3 mb-4 align-items-center">
+  <div class="col">
+    <h4 class="mb-0 fw-bold">
+      <i class="bi bi-bar-chart-fill text-fin me-2"></i>{{ month_name }} {{ year }}
+    </h4>
+    <div class="text-muted" style="font-size:.82rem;">Hyderabad Budget Intelligence</div>
+  </div>
+  <div class="col-auto d-flex gap-2">
+    <a href="{% url 'set_budget_month' year month %}" class="btn btn-gold">
+      <i class="bi bi-{% if current_budget %}pencil{% else %}plus-lg{% endif %} me-1"></i>
+      {% if current_budget %}Update{% else %}Set{% endif %} Budget
+    </a>
+    {% if current_budget %}
+    <form method="post" action="{% url 'delete_budget' year month %}"
+          onsubmit="return confirm('Delete the budget for {{ month_name }} {{ year }}? This cannot be undone.');">
+      {% csrf_token %}
+      <input type="hidden" name="next" value="dashboard">
+      <button type="submit" class="btn"
+              style="background:rgba(248,81,73,.12);border:1px solid rgba(248,81,73,.35);color:#f85149;font-weight:600;border-radius:8px;padding:.6rem 1.2rem;">
+        <i class="bi bi-trash me-1"></i>Delete
+      </button>
+    </form>
+    {% endif %}
+  </div>
+</div>
+
+{% if current_budget %}
+<!-- ── Stat row ───────────────────────────────────────────────── -->
+<div class="row g-3 mb-4">
+  <div class="col-sm-4">
+    <div class="stat-pill">
+      <div class="label">Total Budget</div>
+      <div class="value">₹{{ current_budget.total_budget|indian_number }}</div>
+      <div class="sub">{{ month_name }} {{ year }}</div>
+    </div>
+  </div>
+  <div class="col-sm-4">
+    {% with splits=current_budget.splits.all %}
+    {% for s in splits %}{% if s.category == 'investment' %}
+    <div class="stat-pill">
+      <div class="label">Investment</div>
+      <div class="value">₹{{ s.amount|indian_number }}</div>
+      <div class="sub">{{ s.percentage|floatformat:1 }}% of total</div>
+    </div>
+    {% endif %}{% endfor %}{% endwith %}
+  </div>
+  <div class="col-sm-4">
+    <div class="stat-pill">
+      <div class="label">Rent</div>
+      <div class="value">₹{{ settings.rent_amount|indian_number }}</div>
+      <div class="sub">per month</div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Split breakdown ───────────────────────────────────────── -->
+<div class="row g-3 mb-4">
+  <div class="col-lg-7">
+    <div class="card h-100">
+      <div class="card-header d-flex align-items-center gap-2">
+        <i class="bi bi-grid-3x3 text-fin"></i> Category Splits
+      </div>
+      <div class="card-body p-3">
+        {% with splits=current_budget.splits.all %}
+        {% for cat_key, cat_label in categories %}
+          {% for s in splits %}{% if s.category == cat_key %}
+          <div class="cat-badge mb-2">
+            <span class="icon">{{ s.icon }}</span>
+            <span class="cat-name">{{ cat_label }}</span>
+            <div class="flex-fill px-2">
+              <div class="progress">
+                <div class="progress-bar progress-bar-{% cycle 'c1' 'c2' 'c3' 'c4' 'c5' 'c6' 'c7' 'c8' 'c9' 'c10' 'c11' 'c12' %}"
+                     role="progressbar" style="width:{{ s.percentage }}%"></div>
+              </div>
+            </div>
+            <span class="cat-pct">{{ s.percentage|floatformat:1 }}%</span>
+            <span class="cat-amt">₹{{ s.amount|indian_number }}</span>
+          </div>
+          {% endif %}{% endfor %}
+        {% endfor %}
+        {% endwith %}
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-5 d-flex flex-column" style="gap:.75rem;">
+
+    <!-- ── Living Budget ──────────────────────────────────── -->
+    <div class="card" style="flex:0 0 auto;">
+      <div class="card-header d-flex align-items-center gap-2">
+        <i class="bi bi-wallet2 text-gold"></i> Living Budget
+        <span class="ms-auto" style="font-size:.75rem;color:var(--fin-muted);">after fixed costs</span>
+      </div>
+      <div class="card-body p-3">
+        <div class="text-gold fw-bold mb-2" style="font-size:1.9rem;line-height:1;">
+          ₹{{ living_budget|indian_number }}
+        </div>
+        <div class="d-flex flex-wrap align-items-center" style="gap:.3rem .6rem;font-size:.75rem;">
+          <span style="color:var(--fin-text-soft);">₹{{ current_budget.total_budget|indian_number }}</span>
+          <span style="color:var(--fin-muted);">−</span>
+          <span style="color:var(--fin-muted);">₹{{ investment_amt|indian_number }}<span style="font-size:.65rem;margin-left:.2rem;">invest</span></span>
+          <span style="color:var(--fin-muted);">−</span>
+          <span style="color:var(--fin-muted);">₹{{ settings.rent_amount|indian_number }}<span style="font-size:.65rem;margin-left:.2rem;">rent</span></span>
+          <span style="color:var(--fin-muted);">−</span>
+          <span style="color:var(--fin-muted);">₹{{ emi_amt|indian_number }}<span style="font-size:.65rem;margin-left:.2rem;">EMI</span></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Allocation donut ───────────────────────────────── -->
+    <div class="card d-flex flex-column" style="flex:1 1 0;min-height:0;">
+      <div class="card-header d-flex align-items-center gap-2">
+        <i class="bi bi-pie-chart text-fin"></i> Allocation
+      </div>
+      <div class="card-body p-2" style="flex:1;min-height:0;position:relative;">
+        <canvas id="pieChart"></canvas>
+      </div>
+    </div>
+
+    <!-- ── Live Cost Data ─────────────────────────────────── -->
+    {% if cost_snapshot %}
+    <div class="card" style="flex:0 0 auto;">
+      <div class="card-header d-flex align-items-center gap-2">
+        <i class="bi bi-cloud-check text-fin"></i> Live Cost Data
+      </div>
+      <div class="card-body p-3" style="font-size:.82rem;">
+        {% if cost_snapshot.india_inflation_pct %}
+        <div class="d-flex justify-content-between py-1 border-bottom" style="border-color:var(--fin-border)!important;">
+          <span style="color:var(--fin-muted);">India CPI Inflation</span>
+          <span class="text-gold fw-semibold">{{ cost_snapshot.india_inflation_pct|floatformat:1 }}%</span>
+        </div>
+        {% endif %}
+        {% if cost_snapshot.petrol_price_hyd %}
+        <div class="d-flex justify-content-between py-1 border-bottom" style="border-color:var(--fin-border)!important;">
+          <span style="color:var(--fin-muted);">Petrol Price (HYD est.)</span>
+          <span class="text-fin fw-semibold">₹{{ cost_snapshot.petrol_price_hyd|floatformat:1 }}/L</span>
+        </div>
+        {% endif %}
+        {% if cost_snapshot.rent_index %}
+        <div class="d-flex justify-content-between py-1 border-bottom" style="border-color:var(--fin-border)!important;">
+          <span style="color:var(--fin-muted);">Rent Cost Index</span>
+          <span class="fw-semibold" style="color:var(--fin-text);">{{ cost_snapshot.rent_index|floatformat:1 }}</span>
+        </div>
+        {% endif %}
+        {% if cost_snapshot.groceries_index %}
+        <div class="d-flex justify-content-between py-1" style="border-color:var(--fin-border)!important;">
+          <span style="color:var(--fin-muted);">Groceries Cost Index</span>
+          <span class="fw-semibold" style="color:var(--fin-text);">{{ cost_snapshot.groceries_index|floatformat:1 }}</span>
+        </div>
+        {% endif %}
+        {% if cost_snapshot.fetch_error %}
+        <div class="mt-2" style="font-size:.75rem;color:var(--fin-muted);">
+          <i class="bi bi-exclamation-circle me-1"></i>Some live sources unavailable; using estimates.
+        </div>
+        {% endif %}
+      </div>
+    </div>
+    {% endif %}
+
+  </div>
+</div>
+
+{% else %}
+<!-- ── No budget set ──────────────────────────────────────────── -->
+<div class="card text-center py-5 mb-4">
+  <div class="card-body">
+    <i class="bi bi-wallet2" style="font-size:3rem;color:var(--fin-gold);"></i>
+    <h5 class="mt-3 mb-1">No budget set for {{ month_name }} {{ year }}</h5>
+    <p class="text-muted mb-3">Let the AI suggest an optimal split based on your budget and Hyderabad living costs.</p>
+    <a href="{% url 'set_budget' %}" class="btn btn-gold px-4">
+      <i class="bi bi-plus-lg me-1"></i>Set This Month's Budget
+    </a>
+  </div>
+</div>
+{% endif %}
+
+<!-- ── MoM comparison chart ───────────────────────────────────── -->
+{% if mom_data %}
+<div class="card mb-4">
+  <div class="card-header d-flex align-items-center gap-2">
+    <i class="bi bi-bar-chart-steps text-fin"></i> Month-over-Month Comparison
+    <span class="ms-auto text-muted" style="font-size:.78rem;">{{ mom_data.curr_label }} vs {{ mom_data.prev_label }}</span>
+  </div>
+  <div class="card-body" style="height:280px;">
+    <canvas id="momChart"></canvas>
+  </div>
+</div>
+{% endif %}
+
+<!-- ── Trend chart ────────────────────────────────────────────── -->
+{% if recent_budgets %}
+<div class="card mb-4">
+  <div class="card-header d-flex align-items-center gap-2">
+    <i class="bi bi-graph-up text-fin"></i> Monthly Budget Trend
+  </div>
+  <div class="card-body" style="height:220px;">
+    <canvas id="trendChart"></canvas>
+  </div>
+</div>
+{% endif %}
+
+<!-- ── Recent months quick view ─────────────────────────────── -->
+{% if recent_budgets %}
+<div class="card">
+  <div class="card-header d-flex align-items-center gap-2">
+    <i class="bi bi-calendar3 text-fin"></i> Recent Months
+    <a href="{% url 'history' %}" class="ms-auto btn btn-fin-outline btn-sm">View all</a>
+  </div>
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-hover table-striped mb-0 align-middle">
+        <thead>
+          <tr>
+            <th>Month</th><th>Total</th>
+            {% for cat_key, cat_label in categories %}<th class="d-none d-lg-table-cell">{{ cat_label }}</th>{% endfor %}
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for mb in recent_budgets %}
+          <tr>
+            <td class="fw-semibold">{{ mb.month_year_label }}</td>
+            <td class="text-fin fw-semibold">₹{{ mb.total_budget|indian_number }}</td>
+            {% for cat_key, _ in categories %}
+              {% for s in mb.splits.all %}{% if s.category == cat_key %}
+              <td class="d-none d-lg-table-cell" style="font-size:.8rem;">
+                ₹{{ s.amount|indian_number }}
+              </td>
+              {% endif %}{% endfor %}
+            {% endfor %}
+            <td>
+              <a href="{% url 'set_budget_month' mb.year mb.month %}" class="btn btn-sm btn-fin-outline">
+                <i class="bi bi-pencil"></i>
+              </a>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+{% if current_budget %}
+<script>
+const PIE_LABELS = {{ categories|safe }};
+const PIE_DATA = [
+  {% with splits=current_budget.splits.all %}
+  {% for cat_key, _ in categories %}
+    {% for s in splits %}{% if s.category == cat_key %}{{ s.percentage|floatformat:2 }},{% endif %}{% endfor %}
+  {% endfor %}
+  {% endwith %}
+];
+const PIE_AMOUNTS = [
+  {% with splits=current_budget.splits.all %}
+  {% for cat_key, _ in categories %}
+    {% for s in splits %}{% if s.category == cat_key %}{{ s.amount|floatformat:2 }},{% endif %}{% endfor %}
+  {% endfor %}
+  {% endwith %}
+];
+const CAT_LABELS = [{% for cat_key, cat_label in categories %}"{{ cat_label }}",{% endfor %}];
+const COLORS = [
+  '#00c896','#f0b429','#4b9fff','#ff6b81','#9d50e8',
+  '#ff8c3f','#00cec9','#fd79a8','#e17055','#a29bfe','#b2bec3','#636e72'
+];
+
+const dashLeaderLinePlugin = {
+  id: 'dashLeaderLines',
+  afterDraw(chart) {
+    const ctx  = chart.ctx;
+    const meta = chart.getDatasetMeta(0);
+    if (!meta.data.length) return;
+
+    const cx = chart.chartArea.left + chart.chartArea.width  / 2;
+    const cy = chart.chartArea.top  + chart.chartArea.height / 2;
+    const outerR = meta.data[0].outerRadius;
+    const ds     = chart.data.datasets[0];
+    const total  = ds.data.reduce((s, v) => s + (parseFloat(v) || 0), 0);
+    if (!total) return;
+
+    const RADIAL = 12, HORIZ = 20, DOT = 3, MIN_PCT = 5;
+
+    meta.data.forEach((arc, i) => {
+      const val = parseFloat(ds.data[i]) || 0;
+      const pct = val / total * 100;
+      if (pct < MIN_PCT) return;
+
+      const mid   = (arc.startAngle + arc.endAngle) / 2;
+      const color = ds.backgroundColor[i];
+      const right = Math.cos(mid) >= 0;
+
+      const sx = cx + Math.cos(mid) * (outerR + 2);
+      const sy = cy + Math.sin(mid) * (outerR + 2);
+      const ex = cx + Math.cos(mid) * (outerR + RADIAL);
+      const ey = cy + Math.sin(mid) * (outerR + RADIAL);
+      const dx = ex + (right ? HORIZ : -HORIZ);
+      const dy = ey;
+
+      ctx.save();
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.moveTo(sx, sy);
+      ctx.lineTo(ex, ey);
+      ctx.lineTo(dx, dy);
+      ctx.stroke();
+
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.arc(dx, dy, DOT, 0, Math.PI * 2);
+      ctx.fill();
+
+      const amtStr  = PIE_AMOUNTS[i].toLocaleString('en-IN', {minimumFractionDigits:2, maximumFractionDigits:2});
+      const labelTxt = `${chart.data.labels[i]}  ₹${amtStr}`;
+      ctx.font = '600 9px Inter, system-ui, sans-serif';
+      ctx.fillStyle = '#dde3ea';
+      ctx.textBaseline = 'middle';
+      let tx = dx + (right ? DOT + 3 : -(DOT + 3));
+      let ty = dy;
+      if (!right) {
+        const w = ctx.measureText(labelTxt).width;
+        if (tx - w < 6) { tx = w + 6; ty = dy - 10; }
+      }
+      ctx.textAlign = right ? 'left' : 'right';
+      ctx.fillText(labelTxt, tx, ty);
+      ctx.restore();
+    });
+  }
+};
+
+new Chart(document.getElementById('pieChart'), {
+  type: 'doughnut',
+  data: {
+    labels: CAT_LABELS,
+    datasets: [{ data: PIE_DATA, backgroundColor: COLORS, borderWidth: 2, borderColor: '#161b22', hoverOffset: 6 }]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    cutout: '60%',
+    layout: { padding: 50 },
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        callbacks: {
+          label: (ctx) => ` ${ctx.label}: ₹${PIE_AMOUNTS[ctx.dataIndex].toLocaleString('en-IN', {minimumFractionDigits:2,maximumFractionDigits:2})} (${ctx.parsed.toFixed(1)}%)`
+        }
+      }
+    },
+  },
+  plugins: [dashLeaderLinePlugin],
+});
+</script>
+{% endif %}
+
+{% if mom_data %}
+<script>
+new Chart(document.getElementById('momChart'), {
+  type: 'bar',
+  data: {
+    labels: {{ mom_data.labels }},
+    datasets: [
+      {
+        label: '{{ mom_data.curr_label }}',
+        data: {{ mom_data.curr }},
+        backgroundColor: 'rgba(0,200,150,.75)',
+        borderColor: '#00c896', borderWidth: 1, borderRadius: 4,
+      },
+      {
+        label: '{{ mom_data.prev_label }}',
+        data: {{ mom_data.prev }},
+        backgroundColor: 'rgba(240,180,41,.55)',
+        borderColor: '#f0b429', borderWidth: 1, borderRadius: 4,
+      },
+    ]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    plugins: {
+      legend: { labels: { color: '#adbac7', font: { size: 11 } } },
+      tooltip: { callbacks: { label: (ctx) => ` ₹${ctx.parsed.y.toLocaleString('en-IN', {minimumFractionDigits:2,maximumFractionDigits:2})}` } }
+    },
+    scales: {
+      x: { ticks: { color: '#adbac7', font: { size: 10 } }, grid: { color: '#21262d' } },
+      y: { ticks: { color: '#adbac7', callback: v => '₹'+(v/1000).toFixed(0)+'k' }, grid: { color: '#21262d' } }
+    }
+  }
+});
+</script>
+{% endif %}
+
+{% if chart_labels %}
+<script>
+new Chart(document.getElementById('trendChart'), {
+  type: 'bar',
+  data: {
+    labels: {{ chart_labels }},
+    datasets: [{
+      label: 'Total Budget (₹)',
+      data: {{ chart_totals }},
+      backgroundColor: 'rgba(0,200,150,.25)',
+      borderColor: '#00c896',
+      borderWidth: 2,
+      borderRadius: 6,
+    }]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { display: false } },
+    scales: {
+      x: { ticks: { color: '#adbac7' }, grid: { color: '#21262d' } },
+      y: { ticks: { color: '#adbac7', callback: v => '₹' + (v/1000).toFixed(0) + 'k' },
+           grid: { color: '#21262d' } }
+    }
+  }
+});
+</script>
+{% endif %}
+{% endblock %}

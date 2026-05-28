@@ -1,0 +1,381 @@
+{% extends "budget/base.html" %}
+{% load budget_filters %}
+{% block title %}Set Budget — BudgetIQ{% endblock %}
+{% block nav_set %}active{% endblock %}
+
+{% block extra_head %}
+<style>
+.pct-input { max-width: 90px; }
+.split-row { transition: background .12s; }
+.split-row:hover { background: rgba(0,200,150,.04); }
+#total-bar { height: 8px; border-radius: 4px; transition: width .3s; }
+.model-badge {
+  display:inline-flex; align-items:center; gap:.35rem;
+  padding:.3rem .7rem; border-radius:20px; font-size:.75rem; font-weight:600;
+}
+.model-badge-base  { background:rgba(240,180,41,.12); color:var(--fin-gold); border:1px solid rgba(240,180,41,.2); }
+.model-badge-blend { background:rgba(88,166,255,.12); color:#58a6ff; border:1px solid rgba(88,166,255,.2); }
+.model-badge-ml    { background:rgba(0,200,150,.12);  color:var(--fin-primary); border:1px solid rgba(0,200,150,.2); }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row g-3 mb-3 align-items-center">
+  <div class="col">
+    <h4 class="mb-0 fw-bold">
+      <i class="bi bi-{% if step == 2 %}cpu{% else %}wallet2{% endif %} text-fin me-2"></i>
+      Set Budget — {{ month_name }} {{ year }}
+    </h4>
+    <div class="text-muted" style="font-size:.82rem;">
+      {% if step == 2 %}AI-suggested split &bull; review and confirm{% else %}Enter your total available budget{% endif %}
+    </div>
+  </div>
+  <div class="col-auto">
+    <a href="{% url 'dashboard' %}" class="btn btn-fin-outline btn-sm">
+      <i class="bi bi-arrow-left me-1"></i>Back
+    </a>
+  </div>
+</div>
+
+<!-- ── Step 1: Enter total budget ─────────────────────────────── -->
+{% if step == 1 %}
+<div class="row justify-content-center">
+  <div class="col-md-6 col-lg-5">
+    <div class="card">
+      <div class="card-body p-4">
+        {% if existing %}
+        <div class="alert alert-gold mb-3" style="font-size:.85rem;">
+          <i class="bi bi-exclamation-triangle me-1"></i>
+          A budget of <strong>₹{{ existing.total_budget|indian_number }}</strong> already exists for this month. Submitting will overwrite it.
+        </div>
+        {% endif %}
+        <form method="post">
+          {% csrf_token %}
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Total Monthly Budget (₹)</label>
+            {{ input_form.total_budget }}
+            {% if input_form.total_budget.errors %}
+              <div class="text-danger mt-1" style="font-size:.8rem;">{{ input_form.total_budget.errors.0 }}</div>
+            {% endif %}
+            <div class="form-text text-muted mt-1">
+              <i class="bi bi-info-circle me-1"></i>Tip: investment is set to ₹0 when budget &lt; ₹70,000
+            </div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Notes (optional)</label>
+            {{ input_form.notes }}
+          </div>
+          {{ input_form.year }}{{ input_form.month }}
+          <button type="submit" class="btn btn-gold w-100">
+            <i class="bi bi-cpu me-1"></i>Get AI Split Suggestion
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Step 2: Confirm / adjust splits ───────────────────────── -->
+{% elif step == 2 %}
+<div class="row g-3 mb-3">
+  <!-- Model info -->
+  <div class="col-12">
+    <div class="d-flex flex-wrap gap-2 align-items-center mb-2">
+      {% if history_count == 0 %}
+        <span class="model-badge model-badge-base"><i class="bi bi-database"></i> Hyderabad base allocations</span>
+      {% elif history_count < 3 %}
+        <span class="model-badge model-badge-blend"><i class="bi bi-shuffle"></i> Blended ({{ history_count }} month{% if history_count > 1 %}s{% endif %} of history)</span>
+      {% else %}
+        <span class="model-badge model-badge-ml"><i class="bi bi-cpu"></i> ML regression ({{ history_count }} months)</span>
+      {% endif %}
+      {% if cost_snapshot %}
+        <span class="model-badge" style="background:rgba(189,99,255,.08);color:#bc8cff;border:1px solid rgba(189,99,255,.2);">
+          <i class="bi bi-cloud-download"></i> Live cost data
+          {% if cost_snapshot.india_inflation_pct %}&bull; CPI {{ cost_snapshot.india_inflation_pct|floatformat:1 }}%{% endif %}
+        </span>
+      {% endif %}
+    </div>
+
+    <!-- Fixed expense breakdown -->
+    <div class="card mb-2" style="background:rgba(255,255,255,.03);">
+      <div class="card-body py-2 px-3">
+        <div class="d-flex flex-wrap gap-3 align-items-center" style="font-size:.82rem;">
+          <span class="fw-semibold" style="color:var(--fin-text-soft);">Budget: <span class="text-fin">₹{{ total_budget|indian_number }}</span></span>
+          <span style="color:var(--fin-muted);">–</span>
+          <span style="color:var(--fin-text-soft);">📈 Investment:
+            {% if investment_amount and investment_amount > 0 %}
+              <strong class="text-fin">₹{{ investment_amount|indian_number }}</strong>
+              <small style="color:var(--fin-muted);">(≥₹{{ inv_params.1|indian_number }} threshold)</small>
+            {% else %}
+              <span style="color:var(--fin-muted);">₹0 (budget below ₹{{ inv_params.1|indian_number }})</span>
+            {% endif %}
+          </span>
+          <span style="color:var(--fin-muted);">–</span>
+          <span style="color:var(--fin-text-soft);">🏦 Loan EMI:
+            {% if emi_amount and emi_amount > 0 %}
+              <strong style="color:var(--fin-danger);">₹{{ emi_amount|indian_number }}</strong>
+            {% else %}
+              <span style="color:var(--fin-muted);">₹0 (completed)</span>
+            {% endif %}
+          </span>
+          <span style="color:var(--fin-muted);">=</span>
+          <span style="color:var(--fin-text-soft);">💡 Spendable:
+            <strong class="text-gold">₹{{ spendable|indian_number }}</strong>
+          </span>
+        </div>
+        {% if rent_amount %}
+        <div style="color:var(--fin-muted);margin-top:.25rem;font-size:.75rem;">
+          <i class="bi bi-house me-1"></i>Home floor (rent): ₹{{ rent_amount|indian_number }}/month guaranteed
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<form method="post" id="splitForm">
+  {% csrf_token %}
+  {{ adj_form.year }}{{ adj_form.month }}{{ adj_form.total_budget }}{{ adj_form.notes }}
+
+  <div class="row g-3">
+    <!-- Left: adjustable sliders -->
+    <div class="col-lg-7">
+      <div class="card">
+        <div class="card-header d-flex align-items-center gap-2">
+          <i class="bi bi-sliders text-fin"></i> Adjust Splits
+          <span class="ms-auto text-muted" style="font-size:.8rem;">Total: <span id="total-pct" class="fw-bold text-fin">100.0</span>%</span>
+        </div>
+        <div class="card-body p-3">
+          <div class="progress mb-3">
+            <div id="total-bar" class="bg-success" role="progressbar" style="width:100%"></div>
+          </div>
+
+          {% for cat_key, cat_label in categories %}
+          <div class="split-row d-flex align-items-center gap-2 mb-2 px-1 py-1 rounded">
+            <span style="font-size:1.1rem;min-width:1.6rem;text-align:center;">{{ category_icons|get_item:cat_key }}</span>
+            <span style="flex:1;font-size:.85rem;color:var(--fin-text-soft);">{{ cat_label }}</span>
+            <div class="flex-fill px-2" style="max-width:120px;">
+              <div class="progress">
+                <div class="progress-bar bg-success bar-{{ cat_key }}" style="width:{% for f in adj_form %}{% if f.name == 'pct_'|add:cat_key %}{{ f.value }}{% endif %}{% endfor %}%;transition:width .2s;"></div>
+              </div>
+            </div>
+            {{ adj_form|get_field:cat_key }}
+            <span style="font-size:.8rem;color:var(--fin-gold);min-width:2.5rem;text-align:right;" class="pct-label-{{ cat_key }}">%</span>
+            <span style="font-size:.82rem;font-weight:600;min-width:6rem;text-align:right;color:var(--fin-text);" class="amt-label-{{ cat_key }}"></span>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    <!-- Right: donut preview -->
+    <div class="col-lg-5">
+      <div class="card mb-3">
+        <div class="card-header d-flex align-items-center gap-2">
+          <i class="bi bi-pie-chart text-fin"></i> Live Preview
+        </div>
+        <div class="card-body d-flex align-items-center justify-content-center" style="min-height:240px;">
+          <canvas id="previewPie" style="max-height:240px;"></canvas>
+        </div>
+      </div>
+
+      {% if cost_snapshot %}
+      <div class="card">
+        <div class="card-header d-flex align-items-center gap-2">
+          <i class="bi bi-cloud-check text-fin"></i> Market Data Used
+        </div>
+        <div class="card-body p-3" style="font-size:.82rem;">
+          {% if cost_snapshot.india_inflation_pct %}
+          <div class="d-flex justify-content-between py-1 border-bottom" style="border-color:var(--fin-border)!important;">
+            <span class="text-muted">India CPI Inflation</span>
+            <span class="text-gold fw-semibold">{{ cost_snapshot.india_inflation_pct|floatformat:1 }}%</span>
+          </div>
+          {% endif %}
+          {% if cost_snapshot.petrol_price_hyd %}
+          <div class="d-flex justify-content-between py-1 border-bottom" style="border-color:var(--fin-border)!important;">
+            <span class="text-muted">Petrol Price (HYD est.)</span>
+            <span class="text-fin fw-semibold">₹{{ cost_snapshot.petrol_price_hyd|floatformat:1 }}/L</span>
+          </div>
+          {% endif %}
+          {% if cost_snapshot.rent_index %}
+          <div class="d-flex justify-content-between py-1 border-bottom" style="border-color:var(--fin-border)!important;">
+            <span class="text-muted">Rent Cost Index</span>
+            <span class="fw-semibold" style="color:var(--fin-text);">{{ cost_snapshot.rent_index|floatformat:1 }}</span>
+          </div>
+          {% endif %}
+          {% if cost_snapshot.fetch_error %}
+          <div class="mt-2 text-muted" style="font-size:.75rem;">
+            <i class="bi bi-exclamation-circle me-1"></i>Some live sources unavailable; using estimates.
+          </div>
+          {% endif %}
+        </div>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="d-flex gap-3 mt-4">
+    <button type="submit" class="btn btn-gold px-5">
+      <i class="bi bi-check-lg me-1"></i>Confirm & Save
+    </button>
+    <a href="{% url 'set_budget' %}" class="btn btn-fin-outline">
+      <i class="bi bi-arrow-left me-1"></i>Change Budget
+    </a>
+  </div>
+</form>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+{% if step == 2 %}
+<script>
+const TOTAL_BUDGET = {{ total_budget }};
+const FIXED_AMOUNTS = {
+  emi:        {{ emi_amount }},
+  investment: {{ investment_amount|default:0 }},
+};
+const COLORS = [
+  '#00c896','#f0b429','#4b9fff','#ff6b81','#9d50e8',
+  '#ff8c3f','#00cec9','#fd79a8','#e17055','#a29bfe','#b2bec3','#636e72'
+];
+const CAT_KEYS   = [{% for k,_ in categories %}"{{ k }}",{% endfor %}];
+const CAT_LABELS = [{% for _,l in categories %}"{{ l }}",{% endfor %}];
+
+function resolveAmt(k, pctVal) {
+  return (k in FIXED_AMOUNTS) ? FIXED_AMOUNTS[k] : pctVal / 100 * TOTAL_BUDGET;
+}
+
+// ── Leader-line plugin ────────────────────────────────────────────
+const leaderLinePlugin = {
+  id: 'leaderLines',
+  afterDraw(chart) {
+    const ctx   = chart.ctx;
+    const meta  = chart.getDatasetMeta(0);
+    if (!meta.data.length) return;
+
+    const cx = chart.chartArea.left + chart.chartArea.width  / 2;
+    const cy = chart.chartArea.top  + chart.chartArea.height / 2;
+    const outerR = meta.data[0].outerRadius;
+    const ds     = chart.data.datasets[0];
+    const total  = ds.data.reduce((s, v) => s + (parseFloat(v) || 0), 0);
+    if (!total) return;
+
+    const RADIAL = 12, HORIZ = 20, DOT = 3, MIN_PCT = 5;
+
+    meta.data.forEach((arc, i) => {
+      const val = parseFloat(ds.data[i]) || 0;
+      const pct = val / total * 100;
+      if (pct < MIN_PCT) return;
+
+      const mid   = (arc.startAngle + arc.endAngle) / 2;
+      const color = ds.backgroundColor[i];
+      const right = Math.cos(mid) >= 0;
+
+      const sx = cx + Math.cos(mid) * (outerR + 2);
+      const sy = cy + Math.sin(mid) * (outerR + 2);
+      const ex = cx + Math.cos(mid) * (outerR + RADIAL);
+      const ey = cy + Math.sin(mid) * (outerR + RADIAL);
+      const dx = ex + (right ? HORIZ : -HORIZ);
+      const dy = ey;
+
+      ctx.save();
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.moveTo(sx, sy);
+      ctx.lineTo(ex, ey);
+      ctx.lineTo(dx, dy);
+      ctx.stroke();
+
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.arc(dx, dy, DOT, 0, Math.PI * 2);
+      ctx.fill();
+
+      const rawAmt   = resolveAmt(CAT_KEYS[i], val);
+      const amtStr   = rawAmt.toLocaleString('en-IN', {minimumFractionDigits:2, maximumFractionDigits:2});
+      const labelTxt = `${chart.data.labels[i]}  ₹${amtStr}`;
+      ctx.font = '600 9px Inter, system-ui, sans-serif';
+      ctx.fillStyle = '#dde3ea';
+      ctx.textBaseline = 'middle';
+      let tx = dx + (right ? DOT + 3 : -(DOT + 3));
+      let ty = dy;
+      if (!right) {
+        const w = ctx.measureText(labelTxt).width;
+        if (tx - w < 6) { tx = w + 6; ty = dy - 10; }
+      }
+      ctx.textAlign = right ? 'left' : 'right';
+      ctx.fillText(labelTxt, tx, ty);
+      ctx.restore();
+    });
+  }
+};
+
+const pieCtx = document.getElementById('previewPie').getContext('2d');
+const pieChart = new Chart(pieCtx, {
+  type: 'doughnut',
+  data: {
+    labels: CAT_LABELS,
+    datasets: [{
+      data: CAT_KEYS.map(k => parseFloat(document.querySelector(`input[name="pct_${k}"]`).value) || 0),
+      backgroundColor: COLORS,
+      borderWidth: 2,
+      borderColor: '#161b22',
+      hoverOffset: 5,
+    }]
+  },
+  options: {
+    cutout: '58%',
+    layout: { padding: 38 },
+    plugins: {
+      legend: { display: false },
+      tooltip: { callbacks: {
+        label: (ctx) => {
+          const pct    = ctx.parsed.toFixed(1);
+          const rawAmt = resolveAmt(CAT_KEYS[ctx.dataIndex], ctx.parsed);
+          const amt    = rawAmt.toLocaleString('en-IN', {minimumFractionDigits:2,maximumFractionDigits:2});
+          return ` ${ctx.label}: ₹${amt} (${pct}%)`;
+        }
+      }}
+    }
+  },
+  plugins: [leaderLinePlugin],
+});
+
+function refreshTotals() {
+  let total = 0;
+  CAT_KEYS.forEach(k => {
+    const inp = document.querySelector(`input[name="pct_${k}"]`);
+    const val = parseFloat(inp.value) || 0;
+    total += val;
+    const rawAmt = resolveAmt(k, val);
+    const amt = rawAmt.toLocaleString('en-IN', {minimumFractionDigits:2,maximumFractionDigits:2});
+    document.querySelector(`.amt-label-${k}`).textContent = '₹' + amt;
+    document.querySelector(`.pct-label-${k}`).textContent = val.toFixed(1) + '%';
+    const bar = document.querySelector(`.bar-${k}`);
+    if (bar) bar.style.width = Math.min(val, 100) + '%';
+  });
+
+  document.getElementById('total-pct').textContent = total.toFixed(1);
+  const bar = document.getElementById('total-bar');
+  bar.style.width = Math.min(total, 100) + '%';
+  if (Math.abs(total - 100) < 0.5) {
+    bar.className = 'bg-success'; bar.style.background = '#00c896';
+  } else if (total > 100) {
+    bar.style.background = '#f85149';
+  } else {
+    bar.style.background = '#f0b429';
+  }
+
+  pieChart.data.datasets[0].data = CAT_KEYS.map(k => parseFloat(document.querySelector(`input[name="pct_${k}"]`).value) || 0);
+  pieChart.update('none');
+}
+
+document.querySelectorAll('.pct-input').forEach(inp => {
+  inp.addEventListener('input', refreshTotals);
+});
+
+refreshTotals();
+</script>
+{% endif %}
+{% endblock %}
