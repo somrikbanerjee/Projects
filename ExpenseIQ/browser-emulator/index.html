@@ -329,7 +329,8 @@
     display: flex; flex-direction: column; align-items: center;
     justify-content: center; padding: 64px 20px; color: var(--text2); gap: 10px;
   }
-  .empty-state .empty-icon { font-size: 44px; opacity: .6; }
+  .empty-state .empty-icon { opacity: .35; color: var(--text2); }
+  .empty-state .empty-icon svg { width: 52px; height: 52px; }
 
   /* ── Account Detail Back Header ── */
   .back-header {
@@ -396,6 +397,48 @@
     backdrop-filter: blur(8px);
   }
   .toast.show { opacity: 1; }
+
+  /* ── Drag-to-reorder ── */
+  .drag-ghost { opacity: .3; }
+  .drag-over-top { box-shadow: inset 0 2px 0 var(--blue); }
+  .drag-over-bot { box-shadow: inset 0 -2px 0 var(--blue); }
+  .drag-handle {
+    color: var(--text3); cursor: grab; display: flex; align-items: center;
+    justify-content: center; padding: 0 6px; flex-shrink: 0; touch-action: none;
+  }
+  .drag-handle:active { cursor: grabbing; }
+  .drag-handle svg { width: 14px; height: 14px; }
+
+  /* ── Color Picker Grid ── */
+  .color-picker-grid {
+    display: grid; grid-template-columns: repeat(6, 1fr); gap: 7px;
+  }
+  .color-swatch {
+    aspect-ratio: 1; border-radius: 10px; cursor: pointer;
+    border: 3px solid transparent; transition: transform .15s, box-shadow .15s;
+  }
+  .color-swatch:hover { transform: scale(1.1); }
+  .color-swatch.selected {
+    border-color: var(--surface);
+    box-shadow: 0 0 0 2.5px var(--text), 0 2px 8px rgba(0,0,0,.25);
+    transform: scale(1.12);
+  }
+
+  /* ── Icon Picker ── */
+  .icon-picker-grid {
+    display: grid; grid-template-columns: repeat(6, 1fr); gap: 5px;
+    max-height: 188px; overflow-y: auto; scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+  .ipk-item {
+    display: flex; flex-direction: column; align-items: center; gap: 3px;
+    padding: 8px 2px; border-radius: 10px; cursor: pointer;
+    background: var(--bg); border: 2px solid transparent;
+    transition: all .14s;
+  }
+  .ipk-item:hover { border-color: var(--border); }
+  .ipk-item.selected { border-color: var(--blue); background: var(--blue-dim); }
+  .ipk-label { font-size: 8px; color: var(--text2); text-align: center; line-height: 1.2; }
 
   /* ── Group header delete button ── */
   .group-del-btn {
@@ -581,12 +624,12 @@
               </select>
             </div>
             <div>
-              <div class="field-label">Icon (emoji)</div>
-              <input type="text" id="cat-icon" placeholder="🛒" maxlength="2">
+              <div class="field-label">Icon</div>
+              <div class="icon-picker-grid" id="cat-icon-picker"></div>
             </div>
             <div>
               <div class="field-label">Color</div>
-              <input type="color" id="cat-color" value="#4CAF50" style="width:100%;height:44px;border-radius:12px;border:1.5px solid var(--divider);cursor:pointer;">
+              <div class="color-picker-grid" id="cat-color-picker"></div>
             </div>
             <div style="display:flex;gap:10px;">
               <button class="save-btn" style="flex:1;" onclick="saveCategory()">Save</button>
@@ -633,24 +676,24 @@ function defaultData() {
     ],
     accounts: [],
     categories: [
-      { id:101, name:'Food', type:'EXPENSE', icon:'🍔', color:'#FF5722' },
-      { id:102, name:'Transport', type:'EXPENSE', icon:'🚕', color:'#2196F3' },
-      { id:103, name:'Shopping', type:'EXPENSE', icon:'🛍️', color:'#E91E63' },
-      { id:104, name:'Healthcare', type:'EXPENSE', icon:'❤️', color:'#F44336' },
-      { id:105, name:'Home', type:'EXPENSE', icon:'🏠', color:'#9C27B0' },
-      { id:106, name:'Entertainment', type:'EXPENSE', icon:'🎮', color:'#FF9800' },
-      { id:107, name:'Groceries', type:'EXPENSE', icon:'🛒', color:'#4CAF50' },
-      { id:108, name:'Travel', type:'EXPENSE', icon:'✈️', color:'#03A9F4' },
-      { id:109, name:'Investment', type:'EXPENSE', icon:'📈', color:'#8BC34A' },
-      { id:110, name:'Education', type:'EXPENSE', icon:'🎓', color:'#607D8B' },
-      { id:111, name:'Loan EMI', type:'EXPENSE', icon:'🏦', color:'#795548' },
-      { id:112, name:'Other', type:'EXPENSE', icon:'•••', color:'#9E9E9E' },
-      { id:201, name:'Salary', type:'INCOME', icon:'💼', color:'#4CAF50' },
-      { id:202, name:'Freelance', type:'INCOME', icon:'💻', color:'#00BCD4' },
-      { id:203, name:'Interest', type:'INCOME', icon:'💰', color:'#8BC34A' },
-      { id:204, name:'Cashback', type:'INCOME', icon:'🪙', color:'#FFC107' },
-      { id:205, name:'Inv. Return', type:'INCOME', icon:'📈', color:'#2196F3' },
-      { id:206, name:'Other', type:'INCOME', icon:'•••', color:'#9E9E9E' }
+      { id:101, name:'Food',          type:'EXPENSE', icon:'utensils',     color:'#FF5722', sortOrder:0 },
+      { id:102, name:'Transport',     type:'EXPENSE', icon:'car',          color:'#2196F3', sortOrder:1 },
+      { id:103, name:'Shopping',      type:'EXPENSE', icon:'bag',          color:'#E91E63', sortOrder:2 },
+      { id:104, name:'Healthcare',    type:'EXPENSE', icon:'heart',        color:'#F44336', sortOrder:3 },
+      { id:105, name:'Home',          type:'EXPENSE', icon:'home',         color:'#9C27B0', sortOrder:4 },
+      { id:106, name:'Entertainment', type:'EXPENSE', icon:'play-circle',  color:'#FF9800', sortOrder:5 },
+      { id:107, name:'Groceries',     type:'EXPENSE', icon:'cart',         color:'#4CAF50', sortOrder:6 },
+      { id:108, name:'Travel',        type:'EXPENSE', icon:'compass',      color:'#03A9F4', sortOrder:7 },
+      { id:109, name:'Investment',    type:'EXPENSE', icon:'trending-up',  color:'#8BC34A', sortOrder:8 },
+      { id:110, name:'Education',     type:'EXPENSE', icon:'book',         color:'#607D8B', sortOrder:9 },
+      { id:111, name:'Loan EMI',      type:'EXPENSE', icon:'building',     color:'#795548', sortOrder:10 },
+      { id:112, name:'Other',         type:'EXPENSE', icon:'tag',          color:'#9E9E9E', sortOrder:11 },
+      { id:201, name:'Salary',        type:'INCOME',  icon:'briefcase',    color:'#4CAF50', sortOrder:0 },
+      { id:202, name:'Freelance',     type:'INCOME',  icon:'laptop',       color:'#00BCD4', sortOrder:1 },
+      { id:203, name:'Interest',      type:'INCOME',  icon:'dollar',       color:'#8BC34A', sortOrder:2 },
+      { id:204, name:'Cashback',      type:'INCOME',  icon:'repeat',       color:'#FFC107', sortOrder:3 },
+      { id:205, name:'Inv. Return',   type:'INCOME',  icon:'trending-up',  color:'#2196F3', sortOrder:4 },
+      { id:206, name:'Other',         type:'INCOME',  icon:'tag',          color:'#9E9E9E', sortOrder:5 },
     ],
     transactions: []
   };
@@ -664,10 +707,159 @@ function loadDb() {
     db = s ? JSON.parse(s) : defaultData();
     // Migrate old group types to new simplified scheme
     db.accountGroups.forEach(g => { g.type = normalizeType(g.type); });
+    // Migrate emoji / old material-icon names to new SVG icon keys
+    db.categories.forEach((c, i) => {
+      if (!ICON_DEFS[c.icon]) c.icon = EMOJI_TO_ICON[c.icon] || 'tag';
+      if (c.sortOrder === undefined) c.sortOrder = i;
+    });
+    db.accounts.forEach((a, i) => { if (a.sortOrder === undefined) a.sortOrder = i; });
     saveDb();
   } catch { db = defaultData(); }
 }
 function nextId() { return ++db.nextId; }
+
+// ═══════════════════════════════════════════════════════
+//  ICON LIBRARY
+// ═══════════════════════════════════════════════════════
+// Each entry: SVG path/shape strings for viewBox="0 0 24 24", stroke-based
+const ICON_DEFS = {
+  'utensils':    { label:'Dining',        d:'M3 2v5a2 2 0 002 2h2a2 2 0 002-2V2M7 2v20M15 2h4a1 1 0 011 1v7a3 3 0 01-3 3h0a3 3 0 01-3-3V3a1 1 0 011-1zM18 13v9' },
+  'coffee':      { label:'Coffee',        d:'M18 8h1a4 4 0 010 8h-1M2 8h16v9a4 4 0 01-4 4H6a4 4 0 01-4-4V8zM6 1v3M10 1v3M14 1v3' },
+  'cart':        { label:'Groceries',     d:'M9 22a1 1 0 100-2 1 1 0 000 2zM20 22a1 1 0 100-2 1 1 0 000 2zM1 1h4l2.68 13.39a2 2 0 001.95 1.61h9.72a2 2 0 001.95-1.61L23 6H6' },
+  'bag':         { label:'Shopping',      d:'M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4zM3 6h18M16 10a4 4 0 01-8 0' },
+  'heart':       { label:'Health',        d:'M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z' },
+  'activity':    { label:'Fitness',       d:'M22 12h-4l-3 9L9 3l-3 9H2' },
+  'home':        { label:'Home',          d:'M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2zM9 22V12h6v10' },
+  'tool':        { label:'Repairs',       d:'M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z' },
+  'zap':         { label:'Utilities',     d:'M13 2L3 14h9l-1 8 10-12h-9l1-8z' },
+  'play-circle': { label:'Entertainment', d:'M12 22a10 10 0 100-20 10 10 0 000 20zM10 8l6 4-6 4V8z' },
+  'music':       { label:'Music',         d:'M9 18V5l12-2v13M6 21a3 3 0 100-6 3 3 0 000 6zM18 19a3 3 0 100-6 3 3 0 000 6z' },
+  'compass':     { label:'Travel',        d:'M12 22a10 10 0 100-20 10 10 0 000 20zM16.24 7.76l-2.12 6.36-6.36 2.12 2.12-6.36 6.36-2.12z' },
+  'map-pin':     { label:'Location',      d:'M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0zM12 10a2 2 0 100-4 2 2 0 000 4z' },
+  'car':         { label:'Transport',     d:'M5 17H3a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v9a2 2 0 01-2 2h-2M14 17H9M17 21a2 2 0 100-4 2 2 0 000 4zM7 21a2 2 0 100-4 2 2 0 000 4z' },
+  'bus':         { label:'Transit',       d:'M8 6v6M15 6v6M2 12h19M2 6a2 2 0 012-2h14a2 2 0 012 2v10a2 2 0 01-2 2H4a2 2 0 01-2-2V6zM5 20a1 1 0 100-2 1 1 0 000 2zM19 20a1 1 0 100-2 1 1 0 000 2z' },
+  'trending-up': { label:'Investment',    d:'M23 6l-9.5 9.5-5-5L1 18M17 6h6v6' },
+  'trending-down':{ label:'Loss',         d:'M23 18l-9.5-9.5-5 5L1 6M17 18h6v-6' },
+  'dollar':      { label:'Money',         d:'M12 1v22M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6' },
+  'briefcase':   { label:'Work',          d:'M20 7H4a2 2 0 00-2 2v11a2 2 0 002 2h16a2 2 0 002-2V9a2 2 0 00-2-2zM16 7V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2' },
+  'laptop':      { label:'Freelance',     d:'M20 4H4a1 1 0 00-1 1v11a1 1 0 001 1h16a1 1 0 001-1V5a1 1 0 00-1-1zM1 20h22' },
+  'smartphone':  { label:'Mobile',        d:'M5 2h14a2 2 0 012 2v16a2 2 0 01-2 2H5a2 2 0 01-2-2V4a2 2 0 012-2zM12 18h.01' },
+  'book':        { label:'Education',     d:'M4 19.5A2.5 2.5 0 016.5 17H20M4 19.5A2.5 2.5 0 004 22h16V2H6.5A2.5 2.5 0 004 4.5v15z' },
+  'building':    { label:'Bank',          d:'M3 21h18M3 10h18M3 7l9-4 9 4M4 10v11M20 10v11M8 10v11M12 10v11M16 10v11' },
+  'credit-card': { label:'Card',          d:'M21 4H3a2 2 0 00-2 2v12a2 2 0 002 2h18a2 2 0 002-2V6a2 2 0 00-2-2zM1 10h22M7 15h.01M11 15h2' },
+  'gift':        { label:'Gift',          d:'M20 12v10H4V12M22 7H2v5h20V7zM12 22V7M12 7H7.5a2.5 2.5 0 010-5C11 2 12 7 12 7zM12 7h4.5a2.5 2.5 0 000-5C13 2 12 7 12 7z' },
+  'repeat':      { label:'Cashback',      d:'M17 1l4 4-4 4M3 11V9a4 4 0 014-4h14M7 23l-4-4 4-4M21 13v2a4 4 0 01-4 4H3' },
+  'umbrella':    { label:'Insurance',     d:'M23 12a11.05 11.05 0 00-22 0zm-5 7a3 3 0 01-6 0v-7' },
+  'tag':         { label:'Other',         d:'M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82zM7 7h.01' },
+  'users':       { label:'Family',        d:'M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2M9 7a4 4 0 100 8 4 4 0 000-8zM23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75' },
+  'star':        { label:'Premium',       d:'M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z' },
+  'sun':         { label:'Personal',      d:'M12 15a3 3 0 100-6 3 3 0 000 6zM12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42' },
+  'wifi':        { label:'Internet',      d:'M5 12.55a11 11 0 0114.08 0M1.42 9a16 16 0 0121.16 0M8.53 16.11a6 6 0 016.95 0M12 20h.01' },
+  'package':     { label:'Delivery',      d:'M16.5 9.4l-9-5.19M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 002 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16zM3.27 6.96L12 12.01l8.73-5.05M12 22.08V12' },
+  'pie-chart':   { label:'Budget',        d:'M21.21 15.89A10 10 0 118 2.83M22 12A10 10 0 0012 2v10z' },
+  'shield':      { label:'Security',      d:'M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z' },
+  'droplets':    { label:'Water',         d:'M12 2.69l5.66 5.66a8 8 0 11-11.31 0L12 2.69z' },
+  'flame':       { label:'Fuel',          d:'M8.5 14.5A2.5 2.5 0 0011 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 11-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 002.5 2.5z' },
+};
+
+// Map old emoji/icon strings to new icon keys (backward compat migration)
+const EMOJI_TO_ICON = {
+  '🍔':'utensils','🚕':'car','🛍️':'bag','❤️':'heart','🏠':'home',
+  '🎮':'play-circle','🛒':'cart','✈️':'compass','📈':'trending-up',
+  '🎓':'book','🏦':'building','•••':'tag','💼':'briefcase','💻':'laptop',
+  '💰':'dollar','🪙':'repeat','↔️':'repeat','🏷️':'tag',
+  'restaurant':'utensils','directions_car':'car','shopping_bag':'bag',
+  'favorite':'heart','sports_esports':'play-circle','shopping_cart':'cart',
+  'flight':'compass','trending_up':'trending-up','school':'book',
+  'work':'briefcase','computer':'laptop','savings':'dollar',
+  'monetization_on':'repeat','more_horiz':'tag','attach_money':'dollar',
+  'swap_horiz':'repeat',
+};
+
+function renderIcon(key, size=20, color='currentColor') {
+  const def = ICON_DEFS[key] || ICON_DEFS['tag'];
+  return `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="${color}" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="${def.d}"/></svg>`;
+}
+
+// ── Category modal state ──────────────────────────────────
+let catSelIcon  = 'tag';
+let catSelColor = '#4CAF50';
+
+const CATEGORY_COLORS = [
+  '#EF5350','#EC407A','#AB47BC','#7E57C2',
+  '#5C6BC0','#42A5F5','#26C6DA','#26A69A',
+  '#66BB6A','#D4E157','#FFCA28','#FFA726',
+  '#FF7043','#8D6E63','#78909C','#546E7A',
+  '#F44336','#E91E63','#9C27B0','#3F51B5',
+  '#2196F3','#009688','#4CAF50','#FF5722',
+];
+
+function buildColorPickerUI(selectedColor) {
+  catSelColor = selectedColor || CATEGORY_COLORS[0];
+  const grid = document.getElementById('cat-color-picker');
+  if (!grid) return;
+  grid.innerHTML = '';
+  CATEGORY_COLORS.forEach(hex => {
+    const swatch = document.createElement('div');
+    swatch.className = 'color-swatch' + (catSelColor.toLowerCase() === hex.toLowerCase() ? ' selected' : '');
+    swatch.style.background = hex;
+    swatch.title = hex;
+    swatch.onclick = () => { catSelColor = hex; buildColorPickerUI(hex); };
+    grid.appendChild(swatch);
+  });
+}
+
+function buildIconPickerUI(selectedKey) {
+  catSelIcon = selectedKey || 'tag';
+  const grid = document.getElementById('cat-icon-picker');
+  if (!grid) return;
+  grid.innerHTML = '';
+  Object.entries(ICON_DEFS).forEach(([key, def]) => {
+    const item = document.createElement('div');
+    item.className = 'ipk-item' + (catSelIcon === key ? ' selected' : '');
+    item.dataset.key = key;
+    item.innerHTML = renderIcon(key, 20) + `<span class="ipk-label">${def.label}</span>`;
+    item.onclick = () => { catSelIcon = key; buildIconPickerUI(key); };
+    grid.appendChild(item);
+  });
+}
+
+// ── Drag-to-reorder ──────────────────────────────────────
+function initDragSort(container, itemSel, idKey, onReorder) {
+  if (!container) return;
+  let dragged = null;
+  container.querySelectorAll(itemSel).forEach(el => {
+    el.setAttribute('draggable', 'true');
+    el.addEventListener('dragstart', e => {
+      dragged = el;
+      setTimeout(() => el.classList.add('drag-ghost'), 0);
+      e.dataTransfer.effectAllowed = 'move';
+    });
+    el.addEventListener('dragend', () => {
+      el.classList.remove('drag-ghost');
+      container.querySelectorAll('.drag-over-top,.drag-over-bot')
+        .forEach(x => x.classList.remove('drag-over-top','drag-over-bot'));
+    });
+    el.addEventListener('dragover', e => {
+      if (!dragged || el === dragged) return;
+      e.preventDefault();
+      container.querySelectorAll('.drag-over-top,.drag-over-bot')
+        .forEach(x => x.classList.remove('drag-over-top','drag-over-bot'));
+      const mid = el.getBoundingClientRect().top + el.getBoundingClientRect().height / 2;
+      el.classList.add(e.clientY < mid ? 'drag-over-top' : 'drag-over-bot');
+    });
+    el.addEventListener('drop', e => {
+      e.preventDefault();
+      if (!dragged || el === dragged) return;
+      const mid = el.getBoundingClientRect().top + el.getBoundingClientRect().height / 2;
+      if (e.clientY < mid) container.insertBefore(dragged, el);
+      else el.insertAdjacentElement('afterend', dragged);
+      el.classList.remove('drag-over-top','drag-over-bot');
+      const newOrder = [...container.querySelectorAll(itemSel)].map(x => x.dataset[idKey]);
+      onReorder(newOrder);
+    });
+  });
+}
 
 // ═══════════════════════════════════════════════════════
 //  HELPERS
@@ -857,7 +1049,7 @@ function renderTransactions() {
     <div class="screen-content" id="tx-list">`;
 
   if (days.length === 0) {
-    html += `<div class="empty-state"><div class="empty-icon">📋</div><div>No transactions this month</div><div style="font-size:13px">Tap + to add one</div></div>`;
+    html += `<div class="empty-state"><div class="empty-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14,2 14,8 20,8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="13" y2="17"/></svg></div><div>No transactions this month</div><div style="font-size:13px;color:var(--text3)">Tap + to add one</div></div>`;
   } else {
     days.forEach(date => {
       const dayTxs = byDate[date].sort((a,b)=>b.id-a.id);
@@ -902,8 +1094,8 @@ function renderTxRow(t, onClick) {
   const toAcc = t.toAccountId ? getAccountById(t.toAccountId) : null;
   const isIncome = t.type === 'INCOME';
   const isTransfer = t.type === 'TRANSFER';
-  const color = cat ? cat.color : (isTransfer ? '#9C27B0' : '#9E9E9E');
-  const icon = cat ? cat.icon : (isTransfer ? '↔️' : '•••');
+  const color = cat ? cat.color : (isTransfer ? '#7C3AED' : '#9E9E9E');
+  const iconKey = cat ? cat.icon : (isTransfer ? 'repeat' : 'tag');
   const name = isTransfer ? 'Transfer' : (cat ? cat.name : 'Uncategorized');
   const sub = isTransfer
     ? `${acc?.name||'?'} → ${toAcc?.name||'?'}`
@@ -911,7 +1103,7 @@ function renderTxRow(t, onClick) {
   const amtColor = isIncome ? 'var(--blue)' : (isTransfer ? 'var(--text)' : 'var(--red)');
 
   return `<div class="tx-row" data-txid="${t.id}">
-    <div class="tx-icon" style="background:${color}20;color:${color}">${icon}</div>
+    <div class="tx-icon" style="background:${color}20;color:${color}">${renderIcon(iconKey, 18, color)}</div>
     <div class="tx-info">
       <div class="tx-name">${name}</div>
       <div class="tx-sub">${sub}${t.note?' · '+t.note:''}</div>
@@ -997,13 +1189,13 @@ function renderStats() {
       </div>`;
 
   if (stats.length === 0) {
-    html += `<div class="empty-state"><div>No data for this period</div></div>`;
+    html += `<div class="empty-state"><div class="empty-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></div><div>No data for this period</div></div>`;
   } else {
     stats.forEach((s,i) => {
       const color = s.cat ? s.cat.color : CHART_COLORS[i%CHART_COLORS.length];
       html += `<div class="cat-stat-row">
         <div class="cat-pct-box" style="background:${color}">${Math.round(s.pct)}%</div>
-        <div class="cat-stat-name">${s.cat?s.cat.icon+' '+s.cat.name:'Uncategorized'}</div>
+        <div class="cat-stat-name">${s.cat ? renderIcon(s.cat.icon,18,s.cat.color) + ' ' + s.cat.name : 'Uncategorized'}</div>
         <div class="cat-stat-amount">${fmtCurrency(s.amount)}</div>
       </div>`;
     });
@@ -1081,11 +1273,14 @@ function renderAccounts() {
     <div class="screen-content">`;
 
   if (grouped.length === 0) {
-    html += `<div class="empty-state"><div class="empty-icon">🏦</div><div>No accounts yet</div><div style="font-size:13px">Tap + to add an account</div></div>`;
+    html += `<div class="empty-state"><div class="empty-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/><line x1="6" y1="15" x2="8" y2="15"/></svg></div><div>No accounts yet</div><div style="font-size:13px;color:var(--text3)">Tap + to add an account</div></div>`;
   }
+
+  const dragHandleSvg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><circle cx="9" cy="5" r="1" fill="currentColor"/><circle cx="9" cy="12" r="1" fill="currentColor"/><circle cx="9" cy="19" r="1" fill="currentColor"/><circle cx="15" cy="5" r="1" fill="currentColor"/><circle cx="15" cy="12" r="1" fill="currentColor"/><circle cx="15" cy="19" r="1" fill="currentColor"/></svg>`;
 
   grouped.forEach(({group, accBals, groupTotal}) => {
     const isLiab = isLiability(group.type);
+    const sortedAccBals = [...accBals].sort((a,b)=>(a.acc.sortOrder??0)-(b.acc.sortOrder??0));
     html += `<div style="margin-top:8px;">
       <div class="group-header">
         <span class="group-name">${group.name}</span>
@@ -1094,9 +1289,11 @@ function renderAccounts() {
         <button class="group-del-btn" onclick="confirmDeleteGroup(${group.id},'${group.name.replace(/'/g,"\\'")}',${accBals.length})" title="Delete group">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" width="14" height="14"><polyline points="3,6 5,6 21,6"/><path d="M19,6l-1,14H6L5,6"/><path d="M10,11v6M14,11v6"/><path d="M9,6V4h6v2"/></svg>
         </button>
-      </div>`;
-    accBals.forEach(({acc,bal}) => {
-      html += `<div class="acc-row" data-accid="${acc.id}">
+      </div>
+      <div id="acc-list-${group.id}">`;
+    sortedAccBals.forEach(({acc,bal}) => {
+      html += `<div class="acc-row" data-accid="${acc.id}" style="cursor:default;">
+        <span class="drag-handle" style="padding:0 6px 0 4px;">${dragHandleSvg}</span>
         <span class="acc-name">${acc.name}</span>
         <span class="acc-balance" style="color:${bal<0?'var(--red)':'var(--blue)'}">${fmtCurrency(bal)}</span>
         <button class="acc-menu-btn" data-menuid="${acc.id}" onclick="toggleAccMenu(event,${acc.id})">
@@ -1108,7 +1305,7 @@ function renderAccounts() {
         <button class="acc-action-btn del" onclick="confirmDeleteAcc(${acc.id},'${acc.name.replace(/'/g,"\\'")}')">🗑 Delete</button>
       </div>`;
     });
-    html += `</div>`;
+    html += `</div></div>`;
   });
   html += `</div>`;
 
@@ -1117,10 +1314,22 @@ function renderAccounts() {
 
   root.querySelectorAll('.acc-row').forEach(row => {
     row.onclick = (e) => {
-      if (e.target.closest('.acc-menu-btn')) return;
+      if (e.target.closest('.acc-menu-btn') || e.target.closest('.drag-handle')) return;
       closeAllAccMenus();
       openAccountDetail(+row.dataset.accid);
     };
+  });
+
+  // Wire drag-to-reorder for each group's account list
+  grouped.forEach(({group}) => {
+    const listEl = document.getElementById(`acc-list-${group.id}`);
+    initDragSort(listEl, '.acc-row', 'accid', newOrder => {
+      newOrder.forEach((id, idx) => {
+        const acc = db.accounts.find(a => a.id === +id);
+        if (acc) acc.sortOrder = idx;
+      });
+      saveDb();
+    });
   });
 }
 
@@ -1266,27 +1475,152 @@ function renderMoreScreen() {
 }
 
 function renderCategoryManager() {
+  const dragHandleSvg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><circle cx="9" cy="5" r="1" fill="currentColor"/><circle cx="9" cy="12" r="1" fill="currentColor"/><circle cx="9" cy="19" r="1" fill="currentColor"/><circle cx="15" cy="5" r="1" fill="currentColor"/><circle cx="15" cy="12" r="1" fill="currentColor"/><circle cx="15" cy="19" r="1" fill="currentColor"/></svg>`;
+
   let html = `
     <div class="app-bar">
       <button class="icon-btn" onclick="renderMoreScreen()">&#8592;</button>
       <span class="title">Categories</span>
-      <button class="icon-btn" onclick="openCatModal(null)">＋</button>
+      <button class="icon-btn" onclick="openCatModal(null)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" width="20" height="20"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      </button>
     </div>
     <div class="screen-content">`;
 
   ['EXPENSE','INCOME'].forEach(type => {
-    const cats = db.categories.filter(c=>c.type===type);
-    html += `<div style="padding:10px 16px 4px;font-size:12px;color:var(--text2);font-weight:600;text-transform:uppercase;">${type}</div>`;
+    const cats = db.categories.filter(c=>c.type===type).sort((a,b)=>(a.sortOrder??0)-(b.sortOrder??0));
+    html += `<div style="padding:12px 16px 4px;font-size:11px;color:var(--text2);font-weight:700;text-transform:uppercase;letter-spacing:.6px;background:var(--bg);">${type}</div>
+    <div id="cat-list-${type}">`;
     cats.forEach(c => {
-      html += `<div class="setting-item" onclick="openCatModal(${c.id})">
-        <span class="si-icon">${c.icon}</span>
-        <span class="si-label">${c.name}</span>
-        <span class="si-arrow">›</span>
+      html += `<div class="setting-item" data-catid="${c.id}" style="cursor:default;">
+        <span class="drag-handle">${dragHandleSvg}</span>
+        <span class="si-icon" style="color:${c.color}">${renderIcon(c.icon, 20, c.color)}</span>
+        <span class="si-label" onclick="renderCategoryDetail(${c.id})" style="cursor:pointer;">${c.name}</span>
+        <span class="si-arrow" onclick="renderCategoryDetail(${c.id})" style="cursor:pointer;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" width="16" height="16"><polyline points="9,18 15,12 9,6"/></svg>
+        </span>
       </div>`;
     });
+    html += `</div>`;
   });
   html += `</div>`;
   document.getElementById('screen-root').innerHTML = html;
+
+  ['EXPENSE','INCOME'].forEach(type => {
+    const listEl = document.getElementById(`cat-list-${type}`);
+    initDragSort(listEl, '.setting-item', 'catid', newOrder => {
+      newOrder.forEach((id, idx) => {
+        const cat = db.categories.find(c => c.id === +id);
+        if (cat) cat.sortOrder = idx;
+      });
+      saveDb();
+    });
+  });
+}
+
+// ── Category Detail ─────────────────────────────────────
+let detailCatId = null;
+let catDetailMonth = monthKey(new Date());
+
+function renderCategoryDetail(catId) {
+  detailCatId = catId;
+  const cat = getCategoryById(catId);
+  if (!cat) { renderCategoryManager(); return; }
+
+  const txs = db.transactions.filter(t =>
+    t.categoryId === catId && monthKey(t.date) === catDetailMonth
+  );
+  const income  = txs.filter(t => t.type === 'INCOME').reduce((s,t) => s + t.amount, 0);
+  const expense = txs.filter(t => t.type === 'EXPENSE').reduce((s,t) => s + t.amount, 0);
+  const total   = income - expense;
+
+  const byDate = {};
+  txs.forEach(t => { if (!byDate[t.date]) byDate[t.date] = []; byDate[t.date].push(t); });
+  const days = Object.keys(byDate).sort((a, b) => b.localeCompare(a));
+
+  const editSvg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="20" height="20"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>`;
+  const backSvg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="20" height="20"><polyline points="15,18 9,12 15,6"/></svg>`;
+  const chevL   = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" width="18" height="18"><polyline points="15,18 9,12 15,6"/></svg>`;
+  const chevR   = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" width="18" height="18"><polyline points="9,18 15,12 9,6"/></svg>`;
+
+  let html = `
+    <div class="back-header">
+      <button class="icon-btn" onclick="renderCategoryManager()">${backSvg}</button>
+      <div class="bh-info" style="display:flex;align-items:center;gap:8px;">
+        <span style="color:${cat.color}">${renderIcon(cat.icon, 20, cat.color)}</span>
+        <div>
+          <div class="bh-name">${cat.name}</div>
+          <div class="bh-balance" style="color:var(--text2)">${cat.type === 'INCOME' ? 'Income' : 'Expense'} category</div>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:0;flex-shrink:0;">
+        <button class="icon-btn" onclick="catDetailPrev()">${chevL}</button>
+        <span style="font-size:12px;font-weight:700;color:var(--text);white-space:nowrap;">${fmtMonthYear(catDetailMonth)}</span>
+        <button class="icon-btn" onclick="catDetailNext()">${chevR}</button>
+      </div>
+      <button class="icon-btn" title="Edit category" onclick="openCatModal(${catId})">${editSvg}</button>
+    </div>
+    <div class="summary-bar">
+      <div class="summary-item"><span class="s-label">Income</span><span class="s-amount income-color">${fmtCurrency(income)}</span></div>
+      <div class="s-divider"></div>
+      <div class="summary-item"><span class="s-label">Expenses</span><span class="s-amount expense-color">${fmtCurrency(expense)}</span></div>
+      <div class="s-divider"></div>
+      <div class="summary-item"><span class="s-label">Total</span><span class="s-amount" style="color:${total>=0?'var(--blue)':'var(--red)'}">${fmtCurrency(total)}</span></div>
+    </div>
+    <div class="screen-content">`;
+
+  if (days.length === 0) {
+    html += `<div class="empty-state">
+      <div class="empty-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14,2 14,8 20,8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="13" y2="17"/></svg></div>
+      <div>No transactions this month</div>
+      <div style="font-size:13px;color:var(--text3)">Tap + to add one</div>
+    </div>`;
+  } else {
+    days.forEach(date => {
+      const dayTxs = byDate[date].sort((a, b) => b.id - a.id);
+      const {day, dow, month, year} = fmtDay(date);
+      const dayInc = dayTxs.filter(t => t.type === 'INCOME').reduce((s,t) => s+t.amount, 0);
+      const dayExp = dayTxs.filter(t => t.type === 'EXPENSE').reduce((s,t) => s+t.amount, 0);
+      html += `<div class="day-header">
+        <div class="day-left">
+          <span class="day-num">${day}</span>
+          <span class="day-badge">${dow}</span>
+          <span class="day-date">${String(month).padStart(2,'0')}.${year}</span>
+        </div>
+        <div class="day-amounts">
+          ${dayInc > 0 ? `<span class="income-color">${fmtCurrency(dayInc)}</span>` : ''}
+          ${dayExp > 0 ? `<span class="expense-color">${fmtCurrency(dayExp)}</span>` : ''}
+        </div>
+      </div>`;
+      dayTxs.forEach(t => { html += renderTxRow(t); });
+    });
+  }
+  html += `</div>`;
+
+  const root = document.getElementById('screen-root');
+  root.innerHTML = html;
+  root.style.position = 'relative';
+
+  const fab = document.createElement('button');
+  fab.className = 'fab';
+  fab.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>';
+  fab.onclick = () => openTxModal(null);
+  root.appendChild(fab);
+
+  root.querySelectorAll('.tx-row').forEach(row => {
+    row.onclick = () => openTxModal(+row.dataset.txid);
+  });
+}
+
+function catDetailPrev() {
+  const [y,m] = catDetailMonth.split('-').map(Number);
+  catDetailMonth = monthKey(new Date(y, m-2, 1));
+  renderCategoryDetail(detailCatId);
+}
+function catDetailNext() {
+  const [y,m] = catDetailMonth.split('-').map(Number);
+  catDetailMonth = monthKey(new Date(y, m, 1));
+  renderCategoryDetail(detailCatId);
 }
 
 function renderGroupManager() {
@@ -1406,7 +1740,7 @@ function buildCatGrid() {
     item.className = 'cat-item' + (txSelCatId===cat.id ? ' selected' : '');
     item.style.setProperty('--selected-color', cat.color);
     item.style.setProperty('--selected-bg', cat.color+'22');
-    item.innerHTML = `<span class="ci-icon">${cat.icon}</span><span class="ci-name">${cat.name}</span>`;
+    item.innerHTML = `<span class="ci-icon">${renderIcon(cat.icon, 21, cat.color)}</span><span class="ci-name">${cat.name}</span>`;
     item.onclick = () => { txSelCatId=cat.id; buildCatGrid(); };
     grid.appendChild(item);
   });
@@ -1579,18 +1913,21 @@ function openCatModal(catId) {
   document.getElementById('cat-modal-title').textContent = cat ? 'Edit Category' : 'Add Category';
   document.getElementById('cat-name').value = cat ? cat.name : '';
   document.getElementById('cat-type').value = cat ? cat.type : 'EXPENSE';
-  document.getElementById('cat-icon').value = cat ? cat.icon : '🏷️';
-  document.getElementById('cat-color').value = cat ? rgbToHex(cat.color) : '#4CAF50';
   document.getElementById('delete-cat-btn').style.display = cat && !cat.isSystem ? 'block' : 'none';
   document.getElementById('cat-modal').classList.add('open');
+  // Both pickers need a frame so their grid elements exist in the DOM
+  requestAnimationFrame(() => {
+    buildIconPickerUI(cat ? cat.icon : 'tag');
+    buildColorPickerUI(cat ? cat.color : '#4CAF50');
+  });
 }
 
 function saveCategory() {
   const name = document.getElementById('cat-name').value.trim();
   if (!name) { showToast('Enter category name'); return; }
   const type = document.getElementById('cat-type').value;
-  const icon = document.getElementById('cat-icon').value.trim() || '🏷️';
-  const color = document.getElementById('cat-color').value;
+  const icon = catSelIcon || 'tag';
+  const color = catSelColor || '#4CAF50';
 
   if (editCatId) {
     const idx = db.categories.findIndex(c=>c.id===editCatId);
@@ -1600,7 +1937,9 @@ function saveCategory() {
   }
   saveDb();
   document.getElementById('cat-modal').classList.remove('open');
-  renderCategoryManager();
+  // Return to detail screen if edit was opened from there, otherwise list
+  if (detailCatId && editCatId === detailCatId) renderCategoryDetail(detailCatId);
+  else { detailCatId = null; renderCategoryManager(); }
   showToast(editCatId ? 'Category updated' : 'Category added');
 }
 
@@ -1610,6 +1949,7 @@ function deleteCategory() {
     db.categories = db.categories.filter(c=>c.id!==editCatId);
     saveDb();
     document.getElementById('cat-modal').classList.remove('open');
+    detailCatId = null;
     renderCategoryManager();
     showToast('Category deleted');
   });
