@@ -50,6 +50,7 @@ fun AddEditTransactionScreen(
     var selectedAccountId by remember { mutableStateOf(defaultAccountId ?: state.allAccounts.firstOrNull()?.id) }
     var selectedToAccountId by remember { mutableStateOf<Long?>(null) }
     var showDatePicker by remember { mutableStateOf(false) }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(transactionId, state.allAccounts) {
         if (transactionId != null && transactionId != 0L) {
@@ -71,6 +72,10 @@ fun AddEditTransactionScreen(
                 },
                 actions = {
                     TextButton(onClick = {
+                        if (state.allAccounts.isEmpty()) {
+                            errorMessage = "Please add an account first."
+                            return@TextButton
+                        }
                         val amtDouble = amount.toDoubleOrNull() ?: return@TextButton
                         val accId = selectedAccountId ?: return@TextButton
                         val dateMs = selectedDate.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
@@ -87,11 +92,12 @@ fun AddEditTransactionScreen(
                             )
                         )
                         onDone()
-                    }) { Text("Save", fontWeight = FontWeight.Bold) }
+                    }) { Text("Save", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary) }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = SurfaceWhite)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface)
             )
-        }
+        },
+        containerColor = MaterialTheme.colorScheme.background
     ) { padding ->
         Column(
             Modifier
@@ -105,7 +111,7 @@ fun AddEditTransactionScreen(
                 Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(12.dp))
-                    .background(BackgroundLight),
+                    .background(MaterialTheme.colorScheme.surface),
             ) {
                 listOf("INCOME", "EXPENSE", "TRANSFER").forEach { t ->
                     val selected = type == t
@@ -124,7 +130,7 @@ fun AddEditTransactionScreen(
                     ) {
                         Text(
                             t.lowercase().replaceFirstChar { it.uppercase() },
-                            color = if (selected) Color.White else TextSecondary,
+                            color = if (selected) Color.White else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                             fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
                             fontSize = 14.sp
                         )
@@ -140,27 +146,32 @@ fun AddEditTransactionScreen(
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                 leadingIcon = { Text("₹", fontWeight = FontWeight.Bold, fontSize = 18.sp, modifier = Modifier.padding(start = 4.dp)) },
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp)
+                shape = RoundedCornerShape(12.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                    unfocusedTextColor = MaterialTheme.colorScheme.onSurface
+                )
             )
 
             // Date
             OutlinedCard(
                 onClick = { showDatePicker = true },
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp)
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.outlinedCardColors(containerColor = MaterialTheme.colorScheme.surface)
             ) {
                 Row(
                     Modifier.padding(16.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Icon(Icons.Default.CalendarToday, null, tint = TextSecondary)
-                    Text(selectedDate.format(DateTimeFormatter.ofPattern("dd MMM yyyy")))
+                    Icon(Icons.Default.CalendarToday, null, tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                    Text(selectedDate.format(DateTimeFormatter.ofPattern("dd MMM yyyy")), color = MaterialTheme.colorScheme.onSurface)
                 }
             }
 
             // Account selector
-            Text("Account", fontWeight = FontWeight.SemiBold, color = TextSecondary, fontSize = 13.sp)
+            Text("Account", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f), fontSize = 13.sp)
             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 items(state.allAccounts) { acc ->
                     val sel = selectedAccountId == acc.id
@@ -170,7 +181,8 @@ fun AddEditTransactionScreen(
                         label = { Text(acc.name, fontSize = 13.sp) },
                         colors = FilterChipDefaults.filterChipColors(
                             selectedContainerColor = MaterialTheme.colorScheme.primary,
-                            selectedLabelColor = Color.White
+                            selectedLabelColor = Color.White,
+                            labelColor = MaterialTheme.colorScheme.onSurface
                         )
                     )
                 }
@@ -178,7 +190,7 @@ fun AddEditTransactionScreen(
 
             // To Account (for transfers)
             if (type == "TRANSFER") {
-                Text("To Account", fontWeight = FontWeight.SemiBold, color = TextSecondary, fontSize = 13.sp)
+                Text("To Account", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f), fontSize = 13.sp)
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(state.allAccounts.filter { it.id != selectedAccountId }) { acc ->
                         val sel = selectedToAccountId == acc.id
@@ -188,7 +200,8 @@ fun AddEditTransactionScreen(
                             label = { Text(acc.name, fontSize = 13.sp) },
                             colors = FilterChipDefaults.filterChipColors(
                                 selectedContainerColor = IncomeBlue,
-                                selectedLabelColor = Color.White
+                                selectedLabelColor = Color.White,
+                                labelColor = MaterialTheme.colorScheme.onSurface
                             )
                         )
                     }
@@ -197,7 +210,7 @@ fun AddEditTransactionScreen(
 
             // Category (not for transfers)
             if (type != "TRANSFER" && filteredCategories.isNotEmpty()) {
-                Text("Category", fontWeight = FontWeight.SemiBold, color = TextSecondary, fontSize = 13.sp)
+                Text("Category", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f), fontSize = 13.sp)
                 CategoryGrid(filteredCategories, selectedCategoryId) { selectedCategoryId = it }
             }
 
@@ -208,7 +221,11 @@ fun AddEditTransactionScreen(
                 label = { Text("Note (optional)") },
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp),
-                maxLines = 3
+                maxLines = 3,
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                    unfocusedTextColor = MaterialTheme.colorScheme.onSurface
+                )
             )
         }
     }
@@ -231,6 +248,17 @@ fun AddEditTransactionScreen(
             dismissButton = { TextButton(onClick = { showDatePicker = false }) { Text("Cancel") } }
         ) { DatePicker(state = datePickerState) }
     }
+
+    if (errorMessage != null) {
+        AlertDialog(
+            onDismissRequest = { errorMessage = null },
+            title = { Text("Information") },
+            text = { Text(errorMessage!!) },
+            confirmButton = {
+                TextButton(onClick = { errorMessage = null }) { Text("OK") }
+            }
+        )
+    }
 }
 
 @Composable
@@ -249,7 +277,7 @@ private fun CategoryGrid(
                         Modifier
                             .weight(1f)
                             .clip(RoundedCornerShape(12.dp))
-                            .background(if (isSelected) Color(cat.colorHex.toInt()).copy(alpha = 0.15f) else BackgroundLight)
+                            .background(if (isSelected) Color(cat.colorHex.toInt()).copy(alpha = 0.15f) else MaterialTheme.colorScheme.surface)
                             .border(
                                 width = if (isSelected) 2.dp else 0.dp,
                                 color = if (isSelected) Color(cat.colorHex.toInt()) else Color.Transparent,
@@ -270,7 +298,7 @@ private fun CategoryGrid(
                             cat.name,
                             fontSize = 10.sp,
                             maxLines = 1,
-                            color = if (isSelected) Color(cat.colorHex.toInt()) else TextPrimary
+                            color = if (isSelected) Color(cat.colorHex.toInt()) else MaterialTheme.colorScheme.onSurface
                         )
                     }
                 }

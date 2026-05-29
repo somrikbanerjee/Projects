@@ -44,15 +44,16 @@ fun CategoryManagerScreen(
                         Icon(Icons.Default.Add, "Add")
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = SurfaceWhite),
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface),
                 windowInsets = WindowInsets(0, 0, 0, 0)
             )
-        }
+        },
+        containerColor = MaterialTheme.colorScheme.background
     ) { padding ->
         Column(Modifier.padding(padding).fillMaxSize()) {
             TabRow(
                 selectedTabIndex = if (selectedType == "EXPENSE") 0 else 1,
-                containerColor = SurfaceWhite,
+                containerColor = MaterialTheme.colorScheme.surface,
                 contentColor = MaterialTheme.colorScheme.primary
             ) {
                 Tab(
@@ -74,7 +75,7 @@ fun CategoryManagerScreen(
                     CategoryItem(category) {
                         viewModel.deleteCategory(category)
                     }
-                    HorizontalDivider(color = DividerGray, modifier = Modifier.padding(horizontal = 16.dp))
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, modifier = Modifier.padding(horizontal = 16.dp))
                 }
             }
         }
@@ -89,7 +90,7 @@ private fun CategoryItem(
     Row(
         Modifier
             .fillMaxWidth()
-            .background(SurfaceWhite)
+            .background(MaterialTheme.colorScheme.surface)
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -108,12 +109,17 @@ private fun CategoryItem(
             )
         }
         Spacer(Modifier.width(12.dp))
-        Text(category.name, Modifier.weight(1f), fontSize = 15.sp)
+        Text(category.name, Modifier.weight(1f), fontSize = 15.sp, color = MaterialTheme.colorScheme.onSurface)
         
-        if (!category.isSystem) {
-            IconButton(onClick = onDelete) {
-                Icon(Icons.Default.Delete, "Delete", tint = TextSecondary, modifier = Modifier.size(20.dp))
-            }
+        IconButton(onClick = onDelete) {
+            Icon(Icons.Default.Delete, "Delete", tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f), modifier = Modifier.size(20.dp))
         }
+
+        Icon(
+            Icons.Default.DragIndicator,
+            "Reorder",
+            tint = MaterialTheme.colorScheme.outlineVariant,
+            modifier = Modifier.size(24.dp).padding(4.dp)
+        )
     }
 }

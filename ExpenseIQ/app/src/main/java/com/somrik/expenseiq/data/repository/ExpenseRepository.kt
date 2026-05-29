@@ -24,6 +24,7 @@ class ExpenseRepository @Inject constructor(
     suspend fun insertGroup(group: AccountGroupEntity): Long = accountGroupDao.insert(group)
     suspend fun updateGroup(group: AccountGroupEntity) = accountGroupDao.update(group)
     suspend fun deleteGroup(group: AccountGroupEntity) = accountGroupDao.delete(group)
+    suspend fun deleteAllGroups() = accountGroupDao.deleteAll()
 
     // --- Accounts ---
     fun getAllAccounts(): Flow<List<AccountEntity>> = accountDao.getAllAccounts()
@@ -31,6 +32,7 @@ class ExpenseRepository @Inject constructor(
     suspend fun insertAccount(account: AccountEntity): Long = accountDao.insert(account)
     suspend fun updateAccount(account: AccountEntity) = accountDao.update(account)
     suspend fun deleteAccount(account: AccountEntity) = accountDao.delete(account)
+    suspend fun deleteAllAccounts() = accountDao.deleteAll()
 
     suspend fun getAccountBalance(accountId: Long): Double {
         val account = accountDao.getAccountById(accountId) ?: return 0.0
@@ -44,6 +46,7 @@ class ExpenseRepository @Inject constructor(
     suspend fun insertCategory(category: CategoryEntity): Long = categoryDao.insert(category)
     suspend fun updateCategory(category: CategoryEntity) = categoryDao.update(category)
     suspend fun deleteCategory(category: CategoryEntity) = categoryDao.delete(category)
+    suspend fun deleteAllCategories() = categoryDao.deleteAll()
 
     // --- Transactions ---
     fun getTransactionsForMonth(yearMonth: YearMonth): Flow<List<TransactionEntity>> {
@@ -69,6 +72,20 @@ class ExpenseRepository @Inject constructor(
 
     suspend fun deleteTransaction(transaction: TransactionEntity) = transactionDao.delete(transaction)
     suspend fun deleteTransactionById(id: Long) = transactionDao.deleteById(id)
+    suspend fun deleteAllTransactions() = transactionDao.deleteAll()
+
+    // --- Backup ---
+    suspend fun getAllTransactions(): List<TransactionEntity> = transactionDao.getAllTransactions()
+    suspend fun insertTransactions(list: List<TransactionEntity>) = list.forEach { transactionDao.insert(it) }
+
+    suspend fun getAllCategoriesList(): List<CategoryEntity> = categoryDao.getAllCategoriesList()
+    suspend fun insertCategories(list: List<CategoryEntity>) = list.forEach { categoryDao.insert(it) }
+
+    suspend fun getAllAccountsList(): List<AccountEntity> = accountDao.getAllAccountsList()
+    suspend fun insertAccounts(list: List<AccountEntity>) = list.forEach { accountDao.insert(it) }
+
+    suspend fun getAllGroupsList(): List<AccountGroupEntity> = accountGroupDao.getAllGroupsList()
+    suspend fun insertGroups(list: List<AccountGroupEntity>) = list.forEach { accountGroupDao.insert(it) }
 
     /**
      * Computes affectsMainBalance:
@@ -80,7 +97,7 @@ class ExpenseRepository @Inject constructor(
     private suspend fun enrichAffectsMainBalance(tx: TransactionEntity): TransactionEntity {
         val groups = accountGroupDao.getAllGroups().first().associateBy { it.id }
 
-        fun groupTypeOf(accountId: Long): AccountGroupType? {
+        suspend fun groupTypeOf(accountId: Long): AccountGroupType? {
             val account = accountDao.getAccountById(accountId) ?: return null
             val group = groups[account.groupId] ?: return null
             return AccountGroupType.fromString(group.type)
@@ -96,8 +113,8 @@ class ExpenseRepository @Inject constructor(
         val toType = tx.toAccountId?.let { groupTypeOf(it) }
             ?: return tx.copy(affectsMainBalance = false)
 
-        val affects = (fromType.hasRestrictedBalanceTracking() && toType == AccountGroupType.SPENDING) ||
-                      (fromType == AccountGroupType.SPENDING && toType.hasRestrictedBalanceTracking())
+        val affects = (fromType.hasRestrictedBalanceTracking() && toType == AccountGroupType.OTHERS) ||
+                      (fromType == AccountGroupType.OTHERS && toType.hasRestrictedBalanceTracking())
         return tx.copy(affectsMainBalance = affects)
     }
 

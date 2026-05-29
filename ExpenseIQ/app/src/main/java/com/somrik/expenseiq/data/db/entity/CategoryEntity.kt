@@ -10,5 +10,6 @@ data class CategoryEntity(
     val type: String,
     val icon: String = "attach_money",
     val colorHex: Long = 0xFF4CAF50.toLong(),
-    val isSystem: Boolean = false
+    val isSystem: Boolean = false,
+    val sortOrder: Int = 0
 )

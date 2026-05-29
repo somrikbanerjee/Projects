@@ -12,6 +12,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -36,34 +37,48 @@ fun AccountsScreen(
     var showAddAccountDialog by remember { mutableStateOf(false) }
     var showAddGroupDialog by remember { mutableStateOf(false) }
     var showManageGroupMenu by remember { mutableStateOf(false) }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text("Accounts", fontWeight = FontWeight.Bold) },
                 actions = {
-                    IconButton(onClick = { showManageGroupMenu = true }) {
-                        Icon(Icons.Default.MoreVert, "More")
-                    }
-                    DropdownMenu(
-                        expanded = showManageGroupMenu,
-                        onDismissRequest = { showManageGroupMenu = false }
-                    ) {
+                    Box {
+                        IconButton(onClick = { showManageGroupMenu = true }) {
+                            Icon(Icons.Default.MoreVert, "More")
+                        }
+                        DropdownMenu(
+                            expanded = showManageGroupMenu,
+                            onDismissRequest = { showManageGroupMenu = false }
+                        ) {
                         DropdownMenuItem(
                             text = { Text("Add Account") },
-                            onClick = { showAddAccountDialog = true; showManageGroupMenu = false },
+                            onClick = {
+                                if (state.groups.isEmpty()) {
+                                    errorMessage = "Please add an account group first."
+                                } else {
+                                    showAddAccountDialog = true
+                                }
+                                showManageGroupMenu = false
+                            },
                             leadingIcon = { Icon(Icons.Default.AccountBalance, null) }
                         )
-                        DropdownMenuItem(
-                            text = { Text("Add Group") },
-                            onClick = { showAddGroupDialog = true; showManageGroupMenu = false },
-                            leadingIcon = { Icon(Icons.Default.CreateNewFolder, null) }
-                        )
+                            DropdownMenuItem(
+                                text = { Text("Add Group") },
+                                onClick = {
+                                    showAddGroupDialog = true; showManageGroupMenu = false
+                                },
+                                leadingIcon = { Icon(Icons.Default.CreateNewFolder, null) }
+                            )
+                        }
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = SurfaceWhite)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface),
+                windowInsets = WindowInsets(0, 0, 0, 0)
             )
-        }
+        },
+        containerColor = MaterialTheme.colorScheme.background
     ) { padding ->
         LazyColumn(
             Modifier
@@ -75,18 +90,18 @@ fun AccountsScreen(
                 Row(
                     Modifier
                         .fillMaxWidth()
-                        .background(SurfaceWhite)
+                        .background(MaterialTheme.colorScheme.surface)
                         .padding(horizontal = 16.dp, vertical = 14.dp)
                         .height(IntrinsicSize.Min),
                     horizontalArrangement = Arrangement.SpaceEvenly
                 ) {
                     NetWorthItem("Assets", state.totalAssets, IncomeBlue)
-                    VerticalDivider(modifier = Modifier.fillMaxHeight().padding(vertical = 4.dp))
+                    VerticalDivider(modifier = Modifier.fillMaxHeight().padding(vertical = 4.dp), color = MaterialTheme.colorScheme.outlineVariant)
                     NetWorthItem("Liabilities", state.totalLiabilities, ExpenseRed)
-                    VerticalDivider(modifier = Modifier.fillMaxHeight().padding(vertical = 4.dp))
-                    NetWorthItem("Total", state.totalAssets - state.totalLiabilities, TextPrimary)
+                    VerticalDivider(modifier = Modifier.fillMaxHeight().padding(vertical = 4.dp), color = MaterialTheme.colorScheme.outlineVariant)
+                    NetWorthItem("Total", state.totalAssets - state.totalLiabilities, MaterialTheme.colorScheme.onSurface)
                 }
-                HorizontalDivider(color = DividerGray)
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                 Spacer(Modifier.height(8.dp))
             }
 
@@ -120,12 +135,23 @@ fun AccountsScreen(
             }
         )
     }
+
+    if (errorMessage != null) {
+        AlertDialog(
+            onDismissRequest = { errorMessage = null },
+            title = { Text("Information") },
+            text = { Text(errorMessage!!) },
+            confirmButton = {
+                TextButton(onClick = { errorMessage = null }) { Text("OK") }
+            }
+        )
+    }
 }
 
 @Composable
 private fun NetWorthItem(label: String, amount: Double, color: Color) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(label, fontSize = 12.sp, color = TextSecondary)
+        Text(label, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f), modifier = Modifier.alpha(0f))
         Text(formatCurrency(amount), color = color, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
     }
 }
@@ -141,19 +167,19 @@ private fun AccountGroupSection(
     Column(
         Modifier
             .fillMaxWidth()
-            .background(SurfaceWhite)
+            .background(MaterialTheme.colorScheme.surface)
     ) {
         Row(
             Modifier
                 .fillMaxWidth()
-                .background(BackgroundLight)
+                .background(MaterialTheme.colorScheme.background)
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
                 group.group.name,
-                color = TextSecondary,
+                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Medium
             )
@@ -205,17 +231,25 @@ private fun AccountRow(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        Text(accBal.account.name, Modifier.weight(1f), fontSize = 14.sp)
+        Text(accBal.account.name, Modifier.weight(1f), fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurface)
         Text(
             formatCurrency(accBal.balance),
             color = if (accBal.balance < 0) ExpenseRed else IncomeBlue,
             fontWeight = FontWeight.Medium,
             fontSize = 14.sp
         )
+        Spacer(Modifier.width(8.dp))
+        Icon(
+            Icons.Default.DragIndicator,
+            null,
+            tint = MaterialTheme.colorScheme.outlineVariant,
+            modifier = Modifier.size(20.dp)
+        )
     }
-    HorizontalDivider(color = DividerGray, modifier = Modifier.padding(horizontal = 16.dp))
+    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, modifier = Modifier.padding(horizontal = 16.dp))
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddAccountDialog(
     groups: List<AccountGroupEntity>,
@@ -237,14 +271,22 @@ fun AddAccountDialog(
                     onValueChange = { name = it },
                     label = { Text("Account name") },
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(8.dp)
+                    shape = RoundedCornerShape(8.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                        unfocusedTextColor = MaterialTheme.colorScheme.onSurface
+                    )
                 )
                 OutlinedTextField(
                     value = defaultBal,
                     onValueChange = { defaultBal = it },
                     label = { Text("Opening balance (₹)") },
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(8.dp)
+                    shape = RoundedCornerShape(8.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                        unfocusedTextColor = MaterialTheme.colorScheme.onSurface
+                    )
                 )
                 ExposedDropdownMenuBox(
                     expanded = expanded,
@@ -259,7 +301,11 @@ fun AddAccountDialog(
                         modifier = Modifier
                             .fillMaxWidth()
                             .menuAnchor(),
-                        shape = RoundedCornerShape(8.dp)
+                        shape = RoundedCornerShape(8.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                            unfocusedTextColor = MaterialTheme.colorScheme.onSurface
+                        )
                     )
                     ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
                         groups.forEach { g ->
@@ -281,6 +327,7 @@ fun AddAccountDialog(
     )
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddGroupDialog(
     onDismiss: () -> Unit,
@@ -306,7 +353,11 @@ fun AddGroupDialog(
                     onValueChange = { name = it },
                     label = { Text("Group name") },
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(8.dp)
+                    shape = RoundedCornerShape(8.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                        unfocusedTextColor = MaterialTheme.colorScheme.onSurface
+                    )
                 )
                 ExposedDropdownMenuBox(
                     expanded = expanded,
@@ -321,7 +372,11 @@ fun AddGroupDialog(
                         modifier = Modifier
                             .fillMaxWidth()
                             .menuAnchor(),
-                        shape = RoundedCornerShape(8.dp)
+                        shape = RoundedCornerShape(8.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                            unfocusedTextColor = MaterialTheme.colorScheme.onSurface
+                        )
                     )
                     ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
                         typeOptions.forEach { (type, label) ->

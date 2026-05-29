@@ -23,4 +23,10 @@ interface AccountDao {
 
     @Delete
     suspend fun delete(account: AccountEntity)
+
+    @Query("DELETE FROM accounts")
+    suspend fun deleteAll()
+
+    @Query("SELECT * FROM accounts")
+    suspend fun getAllAccountsList(): List<AccountEntity>
 }

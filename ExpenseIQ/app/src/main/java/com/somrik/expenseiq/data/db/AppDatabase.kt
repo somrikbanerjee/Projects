@@ -12,7 +12,7 @@ import com.somrik.expenseiq.data.db.entity.*
         CategoryEntity::class,
         TransactionEntity::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {

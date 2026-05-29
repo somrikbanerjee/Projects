@@ -1,0 +1,152 @@
+1<?xml version="1.0" encoding="utf-8"?>
+2<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+3    package="com.somrik.expenseiq"
+4    android:versionCode="1"
+5    android:versionName="1.0" >
+6
+7    <uses-sdk
+8        android:minSdkVersion="26"
+9        android:targetSdkVersion="35" />
+10
+11    <permission
+11-->[androidx.core:core:1.13.1] /Users/somrikbanerjee/.gradle/caches/8.13/transforms/145bcd3da3d46d35b59ea5e25fbb3857/transformed/core-1.13.1/AndroidManifest.xml:22:5-24:47
+12        android:name="com.somrik.expenseiq.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
+12-->[androidx.core:core:1.13.1] /Users/somrikbanerjee/.gradle/caches/8.13/transforms/145bcd3da3d46d35b59ea5e25fbb3857/transformed/core-1.13.1/AndroidManifest.xml:23:9-81
+13        android:protectionLevel="signature" />
+13-->[androidx.core:core:1.13.1] /Users/somrikbanerjee/.gradle/caches/8.13/transforms/145bcd3da3d46d35b59ea5e25fbb3857/transformed/core-1.13.1/AndroidManifest.xml:24:9-44
+14
+15    <uses-permission android:name="com.somrik.expenseiq.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION" />
+15-->[androidx.core:core:1.13.1] /Users/somrikbanerjee/.gradle/caches/8.13/transforms/145bcd3da3d46d35b59ea5e25fbb3857/transformed/core-1.13.1/AndroidManifest.xml:26:5-97
+15-->[androidx.core:core:1.13.1] /Users/somrikbanerjee/.gradle/caches/8.13/transforms/145bcd3da3d46d35b59ea5e25fbb3857/transformed/core-1.13.1/AndroidManifest.xml:26:22-94
+16
+17    <application
+17-->/Users/somrikbanerjee/Library/CloudStorage/GoogleDrive-somrik.banerjee@gmail.com/My Drive/Projects/ExpenseIQ/app/src/main/AndroidManifest.xml:4:5-21:19
+18        android:name="com.somrik.expenseiq.ExpenseIQApp"
+18-->/Users/somrikbanerjee/Library/CloudStorage/GoogleDrive-somrik.banerjee@gmail.com/My Drive/Projects/ExpenseIQ/app/src/main/AndroidManifest.xml:5:9-37
+19        android:allowBackup="true"
+19-->/Users/somrikbanerjee/Library/CloudStorage/GoogleDrive-somrik.banerjee@gmail.com/My Drive/Projects/ExpenseIQ/app/src/main/AndroidManifest.xml:6:9-35
+20        android:appComponentFactory="androidx.core.app.CoreComponentFactory"
+20-->[androidx.core:core:1.13.1] /Users/somrikbanerjee/.gradle/caches/8.13/transforms/145bcd3da3d46d35b59ea5e25fbb3857/transformed/core-1.13.1/AndroidManifest.xml:28:18-86
+21        android:debuggable="true"
+22        android:extractNativeLibs="false"
+23        android:icon="@mipmap/ic_launcher"
+23-->/Users/somrikbanerjee/Library/CloudStorage/GoogleDrive-somrik.banerjee@gmail.com/My Drive/Projects/ExpenseIQ/app/src/main/AndroidManifest.xml:7:9-43
+24        android:label="@string/app_name"
+24-->/Users/somrikbanerjee/Library/CloudStorage/GoogleDrive-somrik.banerjee@gmail.com/My Drive/Projects/ExpenseIQ/app/src/main/AndroidManifest.xml:8:9-41
+25        android:roundIcon="@mipmap/ic_launcher_round"
+25-->/Users/somrikbanerjee/Library/CloudStorage/GoogleDrive-somrik.banerjee@gmail.com/My Drive/Projects/ExpenseIQ/app/src/main/AndroidManifest.xml:9:9-54
+26        android:supportsRtl="true"
+26-->/Users/somrikbanerjee/Library/CloudStorage/GoogleDrive-somrik.banerjee@gmail.com/My Drive/Projects/ExpenseIQ/app/src/main/AndroidManifest.xml:10:9-35
+27        android:testOnly="true"
+28        android:theme="@style/Theme.ExpenseIQ" >
+28-->/Users/somrikbanerjee/Library/CloudStorage/GoogleDrive-somrik.banerjee@gmail.com/My Drive/Projects/ExpenseIQ/app/src/main/AndroidManifest.xml:11:9-47
+29        <activity
+29-->/Users/somrikbanerjee/Library/CloudStorage/GoogleDrive-somrik.banerjee@gmail.com/My Drive/Projects/ExpenseIQ/app/src/main/AndroidManifest.xml:12:9-20:20
+30            android:name="com.somrik.expenseiq.MainActivity"
+30-->/Users/somrikbanerjee/Library/CloudStorage/GoogleDrive-somrik.banerjee@gmail.com/My Drive/Projects/ExpenseIQ/app/src/main/AndroidManifest.xml:13:13-41
+31            android:exported="true"
+31-->/Users/somrikbanerjee/Library/CloudStorage/GoogleDrive-somrik.banerjee@gmail.com/My Drive/Projects/ExpenseIQ/app/src/main/AndroidManifest.xml:14:13-36
+32            android:theme="@style/Theme.ExpenseIQ" >
+32-->/Users/somrikbanerjee/Library/CloudStorage/GoogleDrive-somrik.banerjee@gmail.com/My Drive/Projects/ExpenseIQ/app/src/main/AndroidManifest.xml:15:13-51
+33            <intent-filter>
+33-->/Users/somrikbanerjee/Library/CloudStorage/GoogleDrive-somrik.banerjee@gmail.com/My Drive/Projects/ExpenseIQ/app/src/main/AndroidManifest.xml:16:13-19:29
+34                <action android:name="android.intent.action.MAIN" />
+34-->/Users/somrikbanerjee/Library/CloudStorage/GoogleDrive-somrik.banerjee@gmail.com/My Drive/Projects/ExpenseIQ/app/src/main/AndroidManifest.xml:17:17-69
+34-->/Users/somrikbanerjee/Library/CloudStorage/GoogleDrive-somrik.banerjee@gmail.com/My Drive/Projects/ExpenseIQ/app/src/main/AndroidManifest.xml:17:25-66
+35
+36                <category android:name="android.intent.category.LAUNCHER" />
+36-->/Users/somrikbanerjee/Library/CloudStorage/GoogleDrive-somrik.banerjee@gmail.com/My Drive/Projects/ExpenseIQ/app/src/main/AndroidManifest.xml:18:17-77
+36-->/Users/somrikbanerjee/Library/CloudStorage/GoogleDrive-somrik.banerjee@gmail.com/My Drive/Projects/ExpenseIQ/app/src/main/AndroidManifest.xml:18:27-74
+37            </intent-filter>
+38        </activity>
+39
+40        <provider
+40-->[androidx.emoji2:emoji2:1.3.0] /Users/somrikbanerjee/.gradle/caches/8.13/transforms/308a64ab245d61bfc312fd7ad0619f60/transformed/emoji2-1.3.0/AndroidManifest.xml:24:9-32:20
+41            android:name="androidx.startup.InitializationProvider"
+41-->[androidx.emoji2:emoji2:1.3.0] /Users/somrikbanerjee/.gradle/caches/8.13/transforms/308a64ab245d61bfc312fd7ad0619f60/transformed/emoji2-1.3.0/AndroidManifest.xml:25:13-67
+42            android:authorities="com.somrik.expenseiq.androidx-startup"
+42-->[androidx.emoji2:emoji2:1.3.0] /Users/somrikbanerjee/.gradle/caches/8.13/transforms/308a64ab245d61bfc312fd7ad0619f60/transformed/emoji2-1.3.0/AndroidManifest.xml:26:13-68
+43            android:exported="false" >
+43-->[androidx.emoji2:emoji2:1.3.0] /Users/somrikbanerjee/.gradle/caches/8.13/transforms/308a64ab245d61bfc312fd7ad0619f60/transformed/emoji2-1.3.0/AndroidManifest.xml:27:13-37
+44            <meta-data
+44-->[androidx.emoji2:emoji2:1.3.0] /Users/somrikbanerjee/.gradle/caches/8.13/transforms/308a64ab245d61bfc312fd7ad0619f60/transformed/emoji2-1.3.0/AndroidManifest.xml:29:13-31:52
+45                android:name="androidx.emoji2.text.EmojiCompatInitializer"
+45-->[androidx.emoji2:emoji2:1.3.0] /Users/somrikbanerjee/.gradle/caches/8.13/transforms/308a64ab245d61bfc312fd7ad0619f60/transformed/emoji2-1.3.0/AndroidManifest.xml:30:17-75
+46                android:value="androidx.startup" />
+46-->[androidx.emoji2:emoji2:1.3.0] /Users/somrikbanerjee/.gradle/caches/8.13/transforms/308a64ab245d61bfc312fd7ad0619f60/transformed/emoji2-1.3.0/AndroidManifest.xml:31:17-49
+47            <meta-data
+47-->[androidx.lifecycle:lifecycle-process:2.8.4] /Users/somrikbanerjee/.gradle/caches/8.13/transforms/5e8a4766ee72c59e1ce2bf2d1d632d3e/transformed/lifecycle-process-2.8.4/AndroidManifest.xml:29:13-31:52
+48                android:name="androidx.lifecycle.ProcessLifecycleInitializer"
+48-->[androidx.lifecycle:lifecycle-process:2.8.4] /Users/somrikbanerjee/.gradle/caches/8.13/transforms/5e8a4766ee72c59e1ce2bf2d1d632d3e/transformed/lifecycle-process-2.8.4/AndroidManifest.xml:30:17-78
+49                android:value="androidx.startup" />
+49-->[androidx.lifecycle:lifecycle-process:2.8.4] /Users/somrikbanerjee/.gradle/caches/8.13/transforms/5e8a4766ee72c59e1ce2bf2d1d632d3e/transformed/lifecycle-process-2.8.4/AndroidManifest.xml:31:17-49
+50            <meta-data
+50-->[androidx.profileinstaller:profileinstaller:1.3.1] /Users/somrikbanerjee/.gradle/caches/8.13/transforms/f892fce44f10f05e98fb04ef21690d74/transformed/profileinstaller-1.3.1/AndroidManifest.xml:29:13-31:52
+51                android:name="androidx.profileinstaller.ProfileInstallerInitializer"
+51-->[androidx.profileinstaller:profileinstaller:1.3.1] /Users/somrikbanerjee/.gradle/caches/8.13/transforms/f892fce44f10f05e98fb04ef21690d74/transformed/profileinstaller-1.3.1/AndroidManifest.xml:30:17-85
+52                android:value="androidx.startup" />
+52-->[androidx.profileinstaller:profileinstaller:1.3.1] /Users/somrikbanerjee/.gradle/caches/8.13/transforms/f892fce44f10f05e98fb04ef21690d74/transformed/profileinstaller-1.3.1/AndroidManifest.xml:31:17-49
+53        </provider>
+54
+55        <activity
+55-->[androidx.compose.ui:ui-test-manifest:1.6.8] /Users/somrikbanerjee/.gradle/caches/8.13/transforms/8547fc4c40fd6a8fb53bc89126537caa/transformed/ui-test-manifest-1.6.8/AndroidManifest.xml:23:9-25:39
+56            android:name="androidx.activity.ComponentActivity"
+56-->[androidx.compose.ui:ui-test-manifest:1.6.8] /Users/somrikbanerjee/.gradle/caches/8.13/transforms/8547fc4c40fd6a8fb53bc89126537caa/transformed/ui-test-manifest-1.6.8/AndroidManifest.xml:24:13-63
+57            android:exported="true" />
+57-->[androidx.compose.ui:ui-test-manifest:1.6.8] /Users/somrikbanerjee/.gradle/caches/8.13/transforms/8547fc4c40fd6a8fb53bc89126537caa/transformed/ui-test-manifest-1.6.8/AndroidManifest.xml:25:13-36
+58        <activity
+58-->[androidx.compose.ui:ui-tooling-android:1.6.8] /Users/somrikbanerjee/.gradle/caches/8.13/transforms/6697f0ef430289a0540b08ba9ac71897/transformed/ui-tooling-release/AndroidManifest.xml:23:9-25:39
+59            android:name="androidx.compose.ui.tooling.PreviewActivity"
+59-->[androidx.compose.ui:ui-tooling-android:1.6.8] /Users/somrikbanerjee/.gradle/caches/8.13/transforms/6697f0ef430289a0540b08ba9ac71897/transformed/ui-tooling-release/AndroidManifest.xml:24:13-71
+60            android:exported="true" />
+60-->[androidx.compose.ui:ui-tooling-android:1.6.8] /Users/somrikbanerjee/.gradle/caches/8.13/transforms/6697f0ef430289a0540b08ba9ac71897/transformed/ui-tooling-release/AndroidManifest.xml:25:13-36
+61
+62        <service
+62-->[androidx.room:room-runtime:2.6.1] /Users/somrikbanerjee/.gradle/caches/8.13/transforms/9533595cf5da3ceba7a2543134162cef/transformed/room-runtime-2.6.1/AndroidManifest.xml:24:9-28:63
+63            android:name="androidx.room.MultiInstanceInvalidationService"
+63-->[androidx.room:room-runtime:2.6.1] /Users/somrikbanerjee/.gradle/caches/8.13/transforms/9533595cf5da3ceba7a2543134162cef/transformed/room-runtime-2.6.1/AndroidManifest.xml:25:13-74
+64            android:directBootAware="true"
+64-->[androidx.room:room-runtime:2.6.1] /Users/somrikbanerjee/.gradle/caches/8.13/transforms/9533595cf5da3ceba7a2543134162cef/transformed/room-runtime-2.6.1/AndroidManifest.xml:26:13-43
+65            android:exported="false" />
+65-->[androidx.room:room-runtime:2.6.1] /Users/somrikbanerjee/.gradle/caches/8.13/transforms/9533595cf5da3ceba7a2543134162cef/transformed/room-runtime-2.6.1/AndroidManifest.xml:27:13-37
+66
+67        <receiver
+67-->[androidx.profileinstaller:profileinstaller:1.3.1] /Users/somrikbanerjee/.gradle/caches/8.13/transforms/f892fce44f10f05e98fb04ef21690d74/transformed/profileinstaller-1.3.1/AndroidManifest.xml:34:9-52:20
+68            android:name="androidx.profileinstaller.ProfileInstallReceiver"
+68-->[androidx.profileinstaller:profileinstaller:1.3.1] /Users/somrikbanerjee/.gradle/caches/8.13/transforms/f892fce44f10f05e98fb04ef21690d74/transformed/profileinstaller-1.3.1/AndroidManifest.xml:35:13-76
+69            android:directBootAware="false"
+69-->[androidx.profileinstaller:profileinstaller:1.3.1] /Users/somrikbanerjee/.gradle/caches/8.13/transforms/f892fce44f10f05e98fb04ef21690d74/transformed/profileinstaller-1.3.1/AndroidManifest.xml:36:13-44
+70            android:enabled="true"
+70-->[androidx.profileinstaller:profileinstaller:1.3.1] /Users/somrikbanerjee/.gradle/caches/8.13/transforms/f892fce44f10f05e98fb04ef21690d74/transformed/profileinstaller-1.3.1/AndroidManifest.xml:37:13-35
+71            android:exported="true"
+71-->[androidx.profileinstaller:profileinstaller:1.3.1] /Users/somrikbanerjee/.gradle/caches/8.13/transforms/f892fce44f10f05e98fb04ef21690d74/transformed/profileinstaller-1.3.1/AndroidManifest.xml:38:13-36
+72            android:permission="android.permission.DUMP" >
+72-->[androidx.profileinstaller:profileinstaller:1.3.1] /Users/somrikbanerjee/.gradle/caches/8.13/transforms/f892fce44f10f05e98fb04ef21690d74/transformed/profileinstaller-1.3.1/AndroidManifest.xml:39:13-57
+73            <intent-filter>
+73-->[androidx.profileinstaller:profileinstaller:1.3.1] /Users/somrikbanerjee/.gradle/caches/8.13/transforms/f892fce44f10f05e98fb04ef21690d74/transformed/profileinstaller-1.3.1/AndroidManifest.xml:40:13-42:29
+74                <action android:name="androidx.profileinstaller.action.INSTALL_PROFILE" />
+74-->[androidx.profileinstaller:profileinstaller:1.3.1] /Users/somrikbanerjee/.gradle/caches/8.13/transforms/f892fce44f10f05e98fb04ef21690d74/transformed/profileinstaller-1.3.1/AndroidManifest.xml:41:17-91
+74-->[androidx.profileinstaller:profileinstaller:1.3.1] /Users/somrikbanerjee/.gradle/caches/8.13/transforms/f892fce44f10f05e98fb04ef21690d74/transformed/profileinstaller-1.3.1/AndroidManifest.xml:41:25-88
+75            </intent-filter>
+76            <intent-filter>
+76-->[androidx.profileinstaller:profileinstaller:1.3.1] /Users/somrikbanerjee/.gradle/caches/8.13/transforms/f892fce44f10f05e98fb04ef21690d74/transformed/profileinstaller-1.3.1/AndroidManifest.xml:43:13-45:29
+77                <action android:name="androidx.profileinstaller.action.SKIP_FILE" />
+77-->[androidx.profileinstaller:profileinstaller:1.3.1] /Users/somrikbanerjee/.gradle/caches/8.13/transforms/f892fce44f10f05e98fb04ef21690d74/transformed/profileinstaller-1.3.1/AndroidManifest.xml:44:17-85
+77-->[androidx.profileinstaller:profileinstaller:1.3.1] /Users/somrikbanerjee/.gradle/caches/8.13/transforms/f892fce44f10f05e98fb04ef21690d74/transformed/profileinstaller-1.3.1/AndroidManifest.xml:44:25-82
+78            </intent-filter>
+79            <intent-filter>
+79-->[androidx.profileinstaller:profileinstaller:1.3.1] /Users/somrikbanerjee/.gradle/caches/8.13/transforms/f892fce44f10f05e98fb04ef21690d74/transformed/profileinstaller-1.3.1/AndroidManifest.xml:46:13-48:29
+80                <action android:name="androidx.profileinstaller.action.SAVE_PROFILE" />
+80-->[androidx.profileinstaller:profileinstaller:1.3.1] /Users/somrikbanerjee/.gradle/caches/8.13/transforms/f892fce44f10f05e98fb04ef21690d74/transformed/profileinstaller-1.3.1/AndroidManifest.xml:47:17-88
+80-->[androidx.profileinstaller:profileinstaller:1.3.1] /Users/somrikbanerjee/.gradle/caches/8.13/transforms/f892fce44f10f05e98fb04ef21690d74/transformed/profileinstaller-1.3.1/AndroidManifest.xml:47:25-85
+81            </intent-filter>
+82            <intent-filter>
+82-->[androidx.profileinstaller:profileinstaller:1.3.1] /Users/somrikbanerjee/.gradle/caches/8.13/transforms/f892fce44f10f05e98fb04ef21690d74/transformed/profileinstaller-1.3.1/AndroidManifest.xml:49:13-51:29
+83                <action android:name="androidx.profileinstaller.action.BENCHMARK_OPERATION" />
+83-->[androidx.profileinstaller:profileinstaller:1.3.1] /Users/somrikbanerjee/.gradle/caches/8.13/transforms/f892fce44f10f05e98fb04ef21690d74/transformed/profileinstaller-1.3.1/AndroidManifest.xml:50:17-95
+83-->[androidx.profileinstaller:profileinstaller:1.3.1] /Users/somrikbanerjee/.gradle/caches/8.13/transforms/f892fce44f10f05e98fb04ef21690d74/transformed/profileinstaller-1.3.1/AndroidManifest.xml:50:25-92
+84            </intent-filter>
+85        </receiver>
+86    </application>
+87
+88</manifest>

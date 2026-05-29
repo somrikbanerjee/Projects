@@ -9,6 +9,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -37,9 +38,23 @@ fun TransactionsScreen(
     viewModel: TransactionViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsState()
+    var isSearching by remember { mutableStateOf(false) }
 
     Scaffold(
-        topBar = { MonthHeader(state, viewModel::previousMonth, viewModel::nextMonth) },
+        topBar = {
+            MonthHeader(
+                state = state,
+                onPrev = viewModel::previousMonth,
+                onNext = viewModel::nextMonth,
+                isSearching = isSearching,
+                onSearchToggle = {
+                    isSearching = it
+                    if (!it) viewModel.setSearchQuery("")
+                },
+                onSearchQueryChange = viewModel::setSearchQuery
+            )
+        },
+        containerColor = MaterialTheme.colorScheme.background,
         floatingActionButton = {
             FloatingActionButton(
                 onClick = onAddTransaction,
@@ -71,25 +86,60 @@ fun TransactionsScreen(
 private fun MonthHeader(
     state: TransactionUiState,
     onPrev: () -> Unit,
-    onNext: () -> Unit
+    onNext: () -> Unit,
+    isSearching: Boolean,
+    onSearchToggle: (Boolean) -> Unit,
+    onSearchQueryChange: (String) -> Unit
 ) {
     TopAppBar(
         title = {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = onPrev) { Icon(Icons.Default.ChevronLeft, "Previous") }
-                Text(
-                    state.selectedMonth.format(DateTimeFormatter.ofPattern("MMM yyyy")),
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 18.sp
+            if (isSearching) {
+                TextField(
+                    value = state.searchQuery,
+                    onValueChange = onSearchQueryChange,
+                    modifier = Modifier.fillMaxWidth(),
+                    placeholder = { Text("Search transactions...", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)) },
+                    singleLine = true,
+                    colors = TextFieldDefaults.colors(
+                        focusedContainerColor = Color.Transparent,
+                        unfocusedContainerColor = Color.Transparent,
+                        disabledContainerColor = Color.Transparent,
+                        focusedIndicatorColor = Color.Transparent,
+                        unfocusedIndicatorColor = Color.Transparent,
+                        focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                        unfocusedTextColor = MaterialTheme.colorScheme.onSurface
+                    ),
+                    trailingIcon = {
+                        IconButton(onClick = { onSearchToggle(false) }) {
+                            Icon(Icons.Default.Close, "Close search", tint = MaterialTheme.colorScheme.onSurface)
+                        }
+                    }
                 )
-                IconButton(onClick = onNext) { Icon(Icons.Default.ChevronRight, "Next") }
+            } else {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxHeight()
+                ) {
+                    IconButton(onClick = onPrev) { Icon(Icons.Default.ChevronLeft, "Previous", tint = MaterialTheme.colorScheme.onSurface) }
+                    Text(
+                        state.selectedMonth.format(DateTimeFormatter.ofPattern("MMM yyyy")),
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 18.sp,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    IconButton(onClick = onNext) { Icon(Icons.Default.ChevronRight, "Next", tint = MaterialTheme.colorScheme.onSurface) }
+                }
             }
         },
         actions = {
-            IconButton(onClick = {}) { Icon(Icons.Default.Star, "Favorites") }
-            IconButton(onClick = {}) { Icon(Icons.Default.Search, "Search") }
+            if (!isSearching) {
+                IconButton(onClick = { onSearchToggle(true) }) {
+                    Icon(Icons.Default.Search, "Search", tint = MaterialTheme.colorScheme.onSurface)
+                }
+            }
         },
-        colors = TopAppBarDefaults.topAppBarColors(containerColor = SurfaceWhite)
+        colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface),
+        windowInsets = WindowInsets(0, 0, 0, 0)
     )
 }
 
@@ -99,24 +149,24 @@ private fun MonthSummaryBar(income: Double, expense: Double) {
     Row(
         Modifier
             .fillMaxWidth()
-            .background(SurfaceWhite)
+            .background(MaterialTheme.colorScheme.surface)
             .padding(horizontal = 16.dp, vertical = 12.dp)
             .height(IntrinsicSize.Min),
         horizontalArrangement = Arrangement.SpaceEvenly
     ) {
         SummaryItem("Income", income, IncomeBlue)
-        VerticalDivider(modifier = Modifier.fillMaxHeight().padding(vertical = 4.dp))
+        VerticalDivider(modifier = Modifier.fillMaxHeight().padding(vertical = 4.dp), color = MaterialTheme.colorScheme.outlineVariant)
         SummaryItem("Expenses", expense, ExpenseRed)
-        VerticalDivider(modifier = Modifier.fillMaxHeight().padding(vertical = 4.dp))
+        VerticalDivider(modifier = Modifier.fillMaxHeight().padding(vertical = 4.dp), color = MaterialTheme.colorScheme.outlineVariant)
         SummaryItem("Total", total, if (total >= 0) IncomeBlue else ExpenseRed)
     }
-    HorizontalDivider(color = DividerGray)
+    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 }
 
 @Composable
 private fun SummaryItem(label: String, amount: Double, color: Color) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(label, style = MaterialTheme.typography.bodySmall, color = TextSecondary)
+        Text(label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
         Text(
             formatCurrency(amount),
             color = color,
@@ -132,7 +182,7 @@ fun DaySection(dayGroup: DayGroup, onEdit: (Long) -> Unit) {
         Row(
             Modifier
                 .fillMaxWidth()
-                .background(BackgroundLight)
+                .background(MaterialTheme.colorScheme.background)
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
@@ -141,23 +191,24 @@ fun DaySection(dayGroup: DayGroup, onEdit: (Long) -> Unit) {
                 Text(
                     dayGroup.date.dayOfMonth.toString(),
                     fontWeight = FontWeight.Bold,
-                    fontSize = 20.sp
+                    fontSize = 20.sp,
+                    color = MaterialTheme.colorScheme.onBackground
                 )
                 Surface(
-                    color = TextSecondary,
+                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
                     shape = RoundedCornerShape(4.dp)
                 ) {
                     Text(
                         dayGroup.date.dayOfWeek.name.take(3),
                         Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                        color = Color.White,
+                        color = MaterialTheme.colorScheme.background,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Medium
                     )
                 }
                 Text(
                     dayGroup.date.format(DateTimeFormatter.ofPattern("MM.yyyy")),
-                    color = TextSecondary,
+                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
                     fontSize = 12.sp
                 )
             }
@@ -171,7 +222,7 @@ fun DaySection(dayGroup: DayGroup, onEdit: (Long) -> Unit) {
         dayGroup.transactions.forEach { txMeta ->
             TransactionRow(txMeta, onEdit)
         }
-        HorizontalDivider(color = DividerGray)
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
     }
 }
 
@@ -185,7 +236,7 @@ private fun TransactionRow(txMeta: TransactionWithMeta, onEdit: (Long) -> Unit) 
         Modifier
             .fillMaxWidth()
             .clickable { onEdit(tx.id) }
-            .background(SurfaceWhite)
+            .background(MaterialTheme.colorScheme.surface)
             .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -195,7 +246,7 @@ private fun TransactionRow(txMeta: TransactionWithMeta, onEdit: (Long) -> Unit) 
                 .clip(CircleShape)
                 .background(
                     txMeta.category?.let { Color(it.colorHex.toInt()) }
-                        ?: if (isTransfer) IncomeBlue else TextSecondary
+                        ?: if (isTransfer) IncomeBlue else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                 ),
             contentAlignment = Alignment.Center
         ) {
@@ -214,24 +265,25 @@ private fun TransactionRow(txMeta: TransactionWithMeta, onEdit: (Long) -> Unit) 
                     else -> txMeta.category?.name ?: "Uncategorized"
                 },
                 fontWeight = FontWeight.Medium,
-                fontSize = 14.sp
+                fontSize = 14.sp,
+                color = MaterialTheme.colorScheme.onSurface
             )
             Text(
                 when {
                     isTransfer -> "${txMeta.account?.name ?: ""} → ${txMeta.toAccount?.name ?: ""}"
                     else -> txMeta.account?.name ?: ""
                 },
-                color = TextSecondary,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                 fontSize = 12.sp
             )
             if (tx.note.isNotBlank())
-                Text(tx.note, color = TextSecondary, fontSize = 11.sp)
+                Text(tx.note, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f), fontSize = 11.sp)
         }
         Text(
             formatCurrency(tx.amount),
             color = when {
                 isIncome -> IncomeBlue
-                isTransfer -> TextPrimary
+                isTransfer -> MaterialTheme.colorScheme.onSurface
                 else -> ExpenseRed
             },
             fontWeight = FontWeight.Medium,
@@ -248,21 +300,21 @@ fun formatCurrency(amount: Double): String {
 }
 
 fun categoryIcon(name: String?) = when (name) {
-    "restaurant" -> Icons.Default.Restaurant
-    "directions_car" -> Icons.Default.DirectionsCar
-    "shopping_bag" -> Icons.Default.ShoppingBag
-    "favorite" -> Icons.Default.Favorite
-    "home" -> Icons.Default.Home
-    "sports_esports" -> Icons.Default.SportsEsports
-    "shopping_cart" -> Icons.Default.ShoppingCart
-    "flight" -> Icons.Default.Flight
-    "trending_up" -> Icons.Default.TrendingUp
-    "school" -> Icons.Default.School
-    "work" -> Icons.Default.Work
-    "computer" -> Icons.Default.Computer
-    "savings" -> Icons.Default.Savings
-    "monetization_on" -> Icons.Default.MonetizationOn
-    "swap_horiz" -> Icons.Default.SwapHoriz
-    "attach_money" -> Icons.Default.AttachMoney
-    else -> Icons.Default.MoreHoriz
+    "restaurant" -> Icons.Outlined.Restaurant
+    "directions_car" -> Icons.Outlined.DirectionsCar
+    "shopping_bag" -> Icons.Outlined.ShoppingBag
+    "favorite" -> Icons.Outlined.Favorite
+    "home" -> Icons.Outlined.Home
+    "sports_esports" -> Icons.Outlined.SportsEsports
+    "shopping_cart" -> Icons.Outlined.ShoppingCart
+    "flight" -> Icons.Outlined.Flight
+    "trending_up" -> Icons.Outlined.TrendingUp
+    "school" -> Icons.Outlined.School
+    "work" -> Icons.Outlined.Work
+    "computer" -> Icons.Outlined.Computer
+    "savings" -> Icons.Outlined.Savings
+    "monetization_on" -> Icons.Outlined.MonetizationOn
+    "swap_horiz" -> Icons.Outlined.SwapHoriz
+    "attach_money" -> Icons.Outlined.AttachMoney
+    else -> Icons.Outlined.MoreHoriz
 }

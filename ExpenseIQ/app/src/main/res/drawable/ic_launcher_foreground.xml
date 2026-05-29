@@ -6,17 +6,8 @@
     android:viewportHeight="108">
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M54,30 L54,78 M30,54 L78,54"
-        android:strokeWidth="8"
+        android:pathData="M37,28 L71,28 M37,38 L71,38 M54,28 C71,28 71,58 54,58 L37,58 M49,50 L71,80"
+        android:strokeWidth="6"
         android:strokeColor="#FFFFFF"
         android:strokeLineCap="round"/>
-    <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M40,40 L68,68 M68,40 L40,68"
-        android:strokeWidth="0"/>
-    <text
-        android:x="27"
-        android:y="65"
-        android:fillColor="#FFFFFF"
-        android:textSize="32">₹</text>
 </vector>

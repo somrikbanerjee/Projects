@@ -48,12 +48,17 @@ fun StatsScreen(viewModel: StatsViewModel = hiltViewModel()) {
                 },
                 actions = {
                     TextButton(onClick = viewModel::toggleMode) {
-                        Text(if (state.showExpenses) "Monthly ▾" else "Income ▾")
+                        Text(
+                            if (state.showExpenses) "Monthly ▾" else "Income ▾",
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = SurfaceWhite)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface),
+                windowInsets = WindowInsets(0, 0, 0, 0)
             )
-        }
+        },
+        containerColor = MaterialTheme.colorScheme.background
     ) { padding ->
         LazyColumn(
             Modifier
@@ -66,19 +71,19 @@ fun StatsScreen(viewModel: StatsViewModel = hiltViewModel()) {
                 Row(
                     Modifier
                         .fillMaxWidth()
-                        .background(SurfaceWhite)
+                        .background(MaterialTheme.colorScheme.surface)
                         .padding(horizontal = 16.dp, vertical = 8.dp),
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text(
                         "Income ${formatCurrency(state.totalIncome)}",
-                        color = TextSecondary,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                         fontSize = 13.sp
                     )
                     Text(
                         "Expenses ${formatCurrency(state.totalExpense)}",
                         fontWeight = FontWeight.SemiBold,
-                        color = TextPrimary,
+                        color = MaterialTheme.colorScheme.onSurface,
                         fontSize = 13.sp
                     )
                 }
@@ -151,7 +156,7 @@ private fun CategoryStatRow(stat: CategoryStat, index: Int) {
     Row(
         Modifier
             .fillMaxWidth()
-            .background(SurfaceWhite)
+            .background(MaterialTheme.colorScheme.surface)
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -161,7 +166,7 @@ private fun CategoryStatRow(stat: CategoryStat, index: Int) {
                 .size(40.dp)
                 .clip(RoundedCornerShape(8.dp))
                 .background(
-                    stat.category?.let { Color(it.colorHex.toInt()) } ?: TextSecondary
+                    stat.category?.let { Color(it.colorHex.toInt()) } ?: MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                 ),
             contentAlignment = Alignment.Center
         ) {
@@ -176,14 +181,15 @@ private fun CategoryStatRow(stat: CategoryStat, index: Int) {
             stat.category?.name ?: "Uncategorized",
             Modifier.weight(1f),
             fontWeight = FontWeight.Medium,
-            fontSize = 15.sp
+            fontSize = 15.sp,
+            color = MaterialTheme.colorScheme.onSurface
         )
         Text(
             formatCurrency(stat.amount),
             fontWeight = FontWeight.SemiBold,
             fontSize = 15.sp,
-            color = TextPrimary
+            color = MaterialTheme.colorScheme.onSurface
         )
     }
-    HorizontalDivider(color = DividerGray, modifier = Modifier.padding(horizontal = 16.dp))
+    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, modifier = Modifier.padding(horizontal = 16.dp))
 }

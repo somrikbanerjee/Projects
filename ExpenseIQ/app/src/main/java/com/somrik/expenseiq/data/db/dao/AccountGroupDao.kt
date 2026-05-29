@@ -20,4 +20,10 @@ interface AccountGroupDao {
 
     @Delete
     suspend fun delete(group: AccountGroupEntity)
+
+    @Query("DELETE FROM account_groups")
+    suspend fun deleteAll()
+
+    @Query("SELECT * FROM account_groups")
+    suspend fun getAllGroupsList(): List<AccountGroupEntity>
 }

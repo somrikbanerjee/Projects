@@ -34,7 +34,8 @@ data class TransactionUiState(
     val dayGroups: List<DayGroup> = emptyList(),
     val allCategories: List<CategoryEntity> = emptyList(),
     val allAccounts: List<AccountEntity> = emptyList(),
-    val allGroups: List<AccountGroupEntity> = emptyList()
+    val allGroups: List<AccountGroupEntity> = emptyList(),
+    val searchQuery: String = ""
 )
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -46,26 +47,38 @@ class TransactionViewModel @Inject constructor(
     private val _selectedMonth = MutableStateFlow(YearMonth.now())
     val selectedMonth: StateFlow<YearMonth> = _selectedMonth.asStateFlow()
 
+    private val _searchQuery = MutableStateFlow("")
+    val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
+
     val uiState: StateFlow<TransactionUiState> = combine(
         _selectedMonth,
+        _searchQuery,
         repo.getAllGroups(),
         repo.getAllAccounts(),
         repo.getAllCategories()
-    ) { month, groups, accounts, categories ->
-        Triple(month, groups to accounts, categories)
-    }.flatMapLatest { (month, groupsAndAccounts, categories) ->
-        val (groups, accounts) = groupsAndAccounts
+    ) { month, query, groups, accounts, categories ->
+        val groupsAndAccounts = groups to accounts
         repo.getTransactionsForMonth(month).map { txList ->
-            buildUiState(month, txList, categories, accounts, groups)
+            val filteredList = if (query.isBlank()) {
+                txList
+            } else {
+                txList.filter { tx ->
+                    tx.note.contains(query, ignoreCase = true) ||
+                            categories.find { it.id == tx.categoryId }?.name?.contains(query, ignoreCase = true) == true
+                }
+            }
+            buildUiState(month, filteredList, categories, accounts, groups, query)
         }
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), TransactionUiState())
+    }.flatMapLatest { it }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), TransactionUiState())
 
     private fun buildUiState(
         month: YearMonth,
         txList: List<TransactionEntity>,
         categories: List<CategoryEntity>,
         accounts: List<AccountEntity>,
-        groups: List<AccountGroupEntity>
+        groups: List<AccountGroupEntity>,
+        query: String = ""
     ): TransactionUiState {
         val catMap = categories.associateBy { it.id }
         val accMap = accounts.associateBy { it.id }
@@ -114,8 +127,13 @@ class TransactionViewModel @Inject constructor(
             dayGroups = dayGroups,
             allCategories = categories,
             allAccounts = accounts,
-            allGroups = groups
+            allGroups = groups,
+            searchQuery = query
         )
+    }
+
+    fun setSearchQuery(query: String) {
+        _searchQuery.value = query
     }
 
     fun previousMonth() { _selectedMonth.value = _selectedMonth.value.minusMonths(1) }

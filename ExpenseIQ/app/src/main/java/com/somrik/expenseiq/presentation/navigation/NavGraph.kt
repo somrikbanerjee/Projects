@@ -1,17 +1,23 @@
 package com.somrik.expenseiq.presentation.navigation
 
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.navigation.NavType
 import androidx.navigation.compose.*
 import androidx.navigation.navArgument
 import com.somrik.expenseiq.presentation.screens.accounts.AccountDetailScreen
 import com.somrik.expenseiq.presentation.screens.accounts.AccountsScreen
+import com.somrik.expenseiq.presentation.screens.more.CategoryManagerScreen
+import com.somrik.expenseiq.presentation.screens.more.GroupManagerScreen
+import com.somrik.expenseiq.presentation.screens.more.MoreScreen
 import com.somrik.expenseiq.presentation.screens.stats.StatsScreen
 import com.somrik.expenseiq.presentation.screens.transactions.AddEditTransactionScreen
 import com.somrik.expenseiq.presentation.screens.transactions.TransactionsScreen
@@ -23,12 +29,13 @@ sealed class Screen(val route: String, val label: String, val icon: ImageVector)
     object Transactions : Screen("transactions", "Trans.", Icons.Default.Receipt)
     object Stats : Screen("stats", "Stats", Icons.Default.BarChart)
     object Accounts : Screen("accounts", "Accounts", Icons.Default.AccountBalance)
+    object More : Screen("more", "More", Icons.Default.MoreHoriz)
 }
 
 @Composable
 fun ExpenseIQNavGraph() {
     val navController = rememberNavController()
-    val bottomItems = listOf(Screen.Transactions, Screen.Stats, Screen.Accounts)
+    val bottomItems = listOf(Screen.Transactions, Screen.Stats, Screen.Accounts, Screen.More)
     val navBackStack by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStack?.destination?.route
 
@@ -37,19 +44,24 @@ fun ExpenseIQNavGraph() {
     Scaffold(
         bottomBar = {
             if (showBottomBar) {
-                NavigationBar(containerColor = SurfaceWhite) {
+                NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
                     bottomItems.forEach { screen ->
                         NavigationBarItem(
                             selected = currentRoute == screen.route,
                             onClick = {
-                                navController.navigate(screen.route) {
-                                    popUpTo(Screen.Transactions.route) { saveState = true }
-                                    launchSingleTop = true
-                                    restoreState = true
+                                if (currentRoute != screen.route) {
+                                    navController.navigate(screen.route) {
+                                        popUpTo(navController.graph.startDestinationId) {
+                                            saveState = true
+                                        }
+                                        launchSingleTop = true
+                                        restoreState = true
+                                    }
                                 }
                             },
                             icon = { Icon(screen.icon, screen.label) },
-                            label = { Text(screen.label) },
+                            label = { Text(screen.label, modifier = Modifier.alpha(0f)) },
+                            alwaysShowLabel = true,
                             colors = NavigationBarItemDefaults.colors(
                                 selectedIconColor = ExpenseRed,
                                 selectedTextColor = ExpenseRed,
@@ -66,7 +78,11 @@ fun ExpenseIQNavGraph() {
         NavHost(
             navController = navController,
             startDestination = Screen.Transactions.route,
-            modifier = Modifier.padding(innerPadding)
+            modifier = Modifier.padding(innerPadding),
+            enterTransition = { EnterTransition.None },
+            exitTransition = { ExitTransition.None },
+            popEnterTransition = { EnterTransition.None },
+            popExitTransition = { ExitTransition.None }
         ) {
             composable(Screen.Transactions.route) {
                 TransactionsScreen(
@@ -79,6 +95,18 @@ fun ExpenseIQNavGraph() {
                 AccountsScreen(
                     onAccountClick = { id -> navController.navigate("account_detail/$id") }
                 )
+            }
+            composable(Screen.More.route) {
+                MoreScreen(
+                    onManageCategories = { navController.navigate("manage_categories") },
+                    onManageGroups = { navController.navigate("manage_groups") }
+                )
+            }
+            composable("manage_categories") {
+                CategoryManagerScreen(onBack = { navController.popBackStack() })
+            }
+            composable("manage_groups") {
+                GroupManagerScreen(onBack = { navController.popBackStack() })
             }
             composable("add_transaction") {
                 AddEditTransactionScreen(onDone = { navController.popBackStack() })

@@ -12,6 +12,13 @@ val TextPrimary = Color(0xFF212121)
 val TextSecondary = Color(0xFF757575)
 val AccentOrange = Color(0xFFFF7043)
 
+// Dark mode colors
+val SurfaceDark = Color(0xFF1E1E1E)
+val BackgroundDark = Color(0xFF121212)
+val TextPrimaryDark = Color(0xFFE1E1E1)
+val TextSecondaryDark = Color(0xFFAAAAAA)
+val DividerDark = Color(0xFF333333)
+
 val ChartColors = listOf(
     Color(0xFFEF5350.toInt()), Color(0xFFFF9800.toInt()), Color(0xFFFFEB3B.toInt()),
     Color(0xFF4CAF50.toInt()), Color(0xFF2196F3.toInt()), Color(0xFF9C27B0.toInt()),

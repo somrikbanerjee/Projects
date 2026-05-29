@@ -1,0 +1,64 @@
+com.somrik.expenseiq.app-activity-1.9.1-0 /Users/somrikbanerjee/.gradle/caches/8.13/transforms/00921ba1c8b89a9836c3d6358ec7f716/transformed/activity-1.9.1/res
+com.somrik.expenseiq.app-core-runtime-2.2.0-1 /Users/somrikbanerjee/.gradle/caches/8.13/transforms/03ca1edf67d83f634b5e998c3a3dc4b0/transformed/core-runtime-2.2.0/res
+com.somrik.expenseiq.app-savedstate-1.2.1-2 /Users/somrikbanerjee/.gradle/caches/8.13/transforms/134bf10d05765d4ae4dba852aff4d6fe/transformed/savedstate-1.2.1/res
+com.somrik.expenseiq.app-core-1.13.1-3 /Users/somrikbanerjee/.gradle/caches/8.13/transforms/145bcd3da3d46d35b59ea5e25fbb3857/transformed/core-1.13.1/res
+com.somrik.expenseiq.app-annotation-experimental-1.4.0-4 /Users/somrikbanerjee/.gradle/caches/8.13/transforms/14f027b3c4d0084192b1c261e406d5fe/transformed/annotation-experimental-1.4.0/res
+com.somrik.expenseiq.app-lifecycle-livedata-2.8.4-5 /Users/somrikbanerjee/.gradle/caches/8.13/transforms/1f6d63ee5cc5ec2f4e57bce9bc4d8c30/transformed/lifecycle-livedata-2.8.4/res
+com.somrik.expenseiq.app-lifecycle-viewmodel-compose-release-6 /Users/somrikbanerjee/.gradle/caches/8.13/transforms/2d6044f6f9de7cf4978eedd2271b25e7/transformed/lifecycle-viewmodel-compose-release/res
+com.somrik.expenseiq.app-activity-ktx-1.9.1-7 /Users/somrikbanerjee/.gradle/caches/8.13/transforms/2e931c2ea151434f9ac8376b37662cfa/transformed/activity-ktx-1.9.1/res
+com.somrik.expenseiq.app-lifecycle-livedata-core-ktx-2.8.4-8 /Users/somrikbanerjee/.gradle/caches/8.13/transforms/2f6df3626b233a8c9414387ad72c5259/transformed/lifecycle-livedata-core-ktx-2.8.4/res
+com.somrik.expenseiq.app-emoji2-1.3.0-9 /Users/somrikbanerjee/.gradle/caches/8.13/transforms/308a64ab245d61bfc312fd7ad0619f60/transformed/emoji2-1.3.0/res
+com.somrik.expenseiq.app-foundation-release-10 /Users/somrikbanerjee/.gradle/caches/8.13/transforms/30edd5bd6ac4a6cf8b27c6720a280d37/transformed/foundation-release/res
+com.somrik.expenseiq.app-activity-compose-1.9.1-11 /Users/somrikbanerjee/.gradle/caches/8.13/transforms/33c34eaad8b1899efa8d02a594197f1a/transformed/activity-compose-1.9.1/res
+com.somrik.expenseiq.app-lifecycle-viewmodel-ktx-2.8.4-12 /Users/somrikbanerjee/.gradle/caches/8.13/transforms/446cdd0e6cf751a57eaf9cf3b1c6971a/transformed/lifecycle-viewmodel-ktx-2.8.4/res
+com.somrik.expenseiq.app-savedstate-ktx-1.2.1-13 /Users/somrikbanerjee/.gradle/caches/8.13/transforms/4ece7216822cf1f92e0861c5ed686c82/transformed/savedstate-ktx-1.2.1/res
+com.somrik.expenseiq.app-animation-release-14 /Users/somrikbanerjee/.gradle/caches/8.13/transforms/52ce081f5c2bfc62fe8b91b872229133/transformed/animation-release/res
+com.somrik.expenseiq.app-navigation-compose-2.7.7-15 /Users/somrikbanerjee/.gradle/caches/8.13/transforms/5b13a2e72bdae3b732be215f0389adea/transformed/navigation-compose-2.7.7/res
+com.somrik.expenseiq.app-lifecycle-process-2.8.4-16 /Users/somrikbanerjee/.gradle/caches/8.13/transforms/5e8a4766ee72c59e1ce2bf2d1d632d3e/transformed/lifecycle-process-2.8.4/res
+com.somrik.expenseiq.app-foundation-layout-release-17 /Users/somrikbanerjee/.gradle/caches/8.13/transforms/5ef01c9eb4d65b79122900821562481d/transformed/foundation-layout-release/res
+com.somrik.expenseiq.app-lifecycle-viewmodel-savedstate-2.8.4-18 /Users/somrikbanerjee/.gradle/caches/8.13/transforms/61b87012905efba33a8b8320a388d24c/transformed/lifecycle-viewmodel-savedstate-2.8.4/res
+com.somrik.expenseiq.app-runtime-release-19 /Users/somrikbanerjee/.gradle/caches/8.13/transforms/64d673980f5c6f3f3d87ffee6635c0b7/transformed/runtime-release/res
+com.somrik.expenseiq.app-ui-tooling-release-20 /Users/somrikbanerjee/.gradle/caches/8.13/transforms/6697f0ef430289a0540b08ba9ac71897/transformed/ui-tooling-release/res
+com.somrik.expenseiq.app-navigation-runtime-2.7.7-21 /Users/somrikbanerjee/.gradle/caches/8.13/transforms/681cbb060647fad387d615354fde41ce/transformed/navigation-runtime-2.7.7/res
+com.somrik.expenseiq.app-lifecycle-viewmodel-release-22 /Users/somrikbanerjee/.gradle/caches/8.13/transforms/70ae4c94ee978d7729aecd3ce0077cec/transformed/lifecycle-viewmodel-release/res
+com.somrik.expenseiq.app-navigation-common-ktx-2.7.7-23 /Users/somrikbanerjee/.gradle/caches/8.13/transforms/7b7d2a53b3fe03a01404e6503c96a509/transformed/navigation-common-ktx-2.7.7/res
+com.somrik.expenseiq.app-navigation-common-2.7.7-24 /Users/somrikbanerjee/.gradle/caches/8.13/transforms/7d2d0585c453c9cf6bc19a34e9acebbd/transformed/navigation-common-2.7.7/res
+com.somrik.expenseiq.app-navigation-runtime-ktx-2.7.7-25 /Users/somrikbanerjee/.gradle/caches/8.13/transforms/820631658d02798ebced0a5f68361933/transformed/navigation-runtime-ktx-2.7.7/res
+com.somrik.expenseiq.app-room-ktx-2.6.1-26 /Users/somrikbanerjee/.gradle/caches/8.13/transforms/82c479be8dff9aa0b402ae2fd8a25c39/transformed/room-ktx-2.6.1/res
+com.somrik.expenseiq.app-ui-test-manifest-1.6.8-27 /Users/somrikbanerjee/.gradle/caches/8.13/transforms/8547fc4c40fd6a8fb53bc89126537caa/transformed/ui-test-manifest-1.6.8/res
+com.somrik.expenseiq.app-material-release-28 /Users/somrikbanerjee/.gradle/caches/8.13/transforms/8d7d3d4f1af301be2d6af822131f5925/transformed/material-release/res
+com.somrik.expenseiq.app-ui-release-29 /Users/somrikbanerjee/.gradle/caches/8.13/transforms/8f6e512ec74df25fbc1218c4eb0c1bfa/transformed/ui-release/res
+com.somrik.expenseiq.app-room-runtime-2.6.1-30 /Users/somrikbanerjee/.gradle/caches/8.13/transforms/9533595cf5da3ceba7a2543134162cef/transformed/room-runtime-2.6.1/res
+com.somrik.expenseiq.app-material-icons-core-release-31 /Users/somrikbanerjee/.gradle/caches/8.13/transforms/986a7f3f39d00240d320369d45892da3/transformed/material-icons-core-release/res
+com.somrik.expenseiq.app-hilt-navigation-1.2.0-32 /Users/somrikbanerjee/.gradle/caches/8.13/transforms/a52bc082706a30e01cda63eab61f13d1/transformed/hilt-navigation-1.2.0/res
+com.somrik.expenseiq.app-startup-runtime-1.1.1-33 /Users/somrikbanerjee/.gradle/caches/8.13/transforms/b22927a1983bc0b3088e2bcc30b1bda0/transformed/startup-runtime-1.1.1/res
+com.somrik.expenseiq.app-hilt-navigation-compose-1.2.0-34 /Users/somrikbanerjee/.gradle/caches/8.13/transforms/b2904dc659fcbd23f502d9976461f44e/transformed/hilt-navigation-compose-1.2.0/res
+com.somrik.expenseiq.app-ui-unit-release-35 /Users/somrikbanerjee/.gradle/caches/8.13/transforms/b4814bdeca438dd9f59ddbffad9a3d4e/transformed/ui-unit-release/res
+com.somrik.expenseiq.app-sqlite-framework-2.4.0-36 /Users/somrikbanerjee/.gradle/caches/8.13/transforms/b52fbe65bc2b0eeab3782cc230ef5c6b/transformed/sqlite-framework-2.4.0/res
+com.somrik.expenseiq.app-lifecycle-livedata-core-2.8.4-37 /Users/somrikbanerjee/.gradle/caches/8.13/transforms/b6f5a220a522d29918653b5c0e331b4c/transformed/lifecycle-livedata-core-2.8.4/res
+com.somrik.expenseiq.app-fragment-1.5.1-38 /Users/somrikbanerjee/.gradle/caches/8.13/transforms/b8f638dbf49005b36f6ef501bc63823a/transformed/fragment-1.5.1/res
+com.somrik.expenseiq.app-animation-core-release-39 /Users/somrikbanerjee/.gradle/caches/8.13/transforms/bbc453436a64adf89c2b019120e77791/transformed/animation-core-release/res
+com.somrik.expenseiq.app-ui-text-release-40 /Users/somrikbanerjee/.gradle/caches/8.13/transforms/bd2c00855f697b3f16e6721f89e7fb1e/transformed/ui-text-release/res
+com.somrik.expenseiq.app-material-icons-extended-release-41 /Users/somrikbanerjee/.gradle/caches/8.13/transforms/be4957eb1399c2e5a8e401df04bf55c2/transformed/material-icons-extended-release/res
+com.somrik.expenseiq.app-ui-geometry-release-42 /Users/somrikbanerjee/.gradle/caches/8.13/transforms/c4efe0560b34e7cfcdc25489004604a7/transformed/ui-geometry-release/res
+com.somrik.expenseiq.app-ui-util-release-43 /Users/somrikbanerjee/.gradle/caches/8.13/transforms/c625b5ef7e52b7f38e94e2a08fa48f70/transformed/ui-util-release/res
+com.somrik.expenseiq.app-material-ripple-release-44 /Users/somrikbanerjee/.gradle/caches/8.13/transforms/c648c81a2a11e529509af5a39611d8e1/transformed/material-ripple-release/res
+com.somrik.expenseiq.app-lifecycle-runtime-ktx-release-45 /Users/somrikbanerjee/.gradle/caches/8.13/transforms/c806ee1aadb819c87f3c6bba75c47551/transformed/lifecycle-runtime-ktx-release/res
+com.somrik.expenseiq.app-ui-tooling-preview-release-46 /Users/somrikbanerjee/.gradle/caches/8.13/transforms/ca648faf69fb8b62815a779249c5ac20/transformed/ui-tooling-preview-release/res
+com.somrik.expenseiq.app-ui-tooling-data-release-47 /Users/somrikbanerjee/.gradle/caches/8.13/transforms/d280c8305fd0e0ae6b8c521f8d6e299e/transformed/ui-tooling-data-release/res
+com.somrik.expenseiq.app-ui-graphics-release-48 /Users/somrikbanerjee/.gradle/caches/8.13/transforms/da5066db32726ba54afbcc9be3e72358/transformed/ui-graphics-release/res
+com.somrik.expenseiq.app-customview-poolingcontainer-1.0.0-49 /Users/somrikbanerjee/.gradle/caches/8.13/transforms/e1fdf51b8773ad277b41af9f4046f7e4/transformed/customview-poolingcontainer-1.0.0/res
+com.somrik.expenseiq.app-material3-release-50 /Users/somrikbanerjee/.gradle/caches/8.13/transforms/e24126bf7cadc0c16a22988c4d759dcb/transformed/material3-release/res
+com.somrik.expenseiq.app-runtime-saveable-release-51 /Users/somrikbanerjee/.gradle/caches/8.13/transforms/ecdc0263672875226eddfcaf698003fe/transformed/runtime-saveable-release/res
+com.somrik.expenseiq.app-sqlite-2.4.0-52 /Users/somrikbanerjee/.gradle/caches/8.13/transforms/f23627675f71fa80a137837c1dcffc01/transformed/sqlite-2.4.0/res
+com.somrik.expenseiq.app-core-ktx-1.13.1-53 /Users/somrikbanerjee/.gradle/caches/8.13/transforms/f5c8b5b8a649a633891b5b0c1c8d4b55/transformed/core-ktx-1.13.1/res
+com.somrik.expenseiq.app-profileinstaller-1.3.1-54 /Users/somrikbanerjee/.gradle/caches/8.13/transforms/f892fce44f10f05e98fb04ef21690d74/transformed/profileinstaller-1.3.1/res
+com.somrik.expenseiq.app-lifecycle-runtime-release-55 /Users/somrikbanerjee/.gradle/caches/8.13/transforms/fc8d2a4dead92223936f288a988f54d5/transformed/lifecycle-runtime-release/res
+com.somrik.expenseiq.app-pngs-56 /Users/somrikbanerjee/Library/CloudStorage/GoogleDrive-somrik.banerjee@gmail.com/My Drive/Projects/ExpenseIQ/app/build/generated/res/pngs/debug
+com.somrik.expenseiq.app-resValues-57 /Users/somrikbanerjee/Library/CloudStorage/GoogleDrive-somrik.banerjee@gmail.com/My Drive/Projects/ExpenseIQ/app/build/generated/res/resValues/debug
+com.somrik.expenseiq.app-updated_navigation_xml-58 /Users/somrikbanerjee/Library/CloudStorage/GoogleDrive-somrik.banerjee@gmail.com/My Drive/Projects/ExpenseIQ/app/build/generated/updated_navigation_xml/debug
+com.somrik.expenseiq.app-packageDebugResources-59 /Users/somrikbanerjee/Library/CloudStorage/GoogleDrive-somrik.banerjee@gmail.com/My Drive/Projects/ExpenseIQ/app/build/intermediates/incremental/debug/packageDebugResources/merged.dir
+com.somrik.expenseiq.app-packageDebugResources-60 /Users/somrikbanerjee/Library/CloudStorage/GoogleDrive-somrik.banerjee@gmail.com/My Drive/Projects/ExpenseIQ/app/build/intermediates/incremental/debug/packageDebugResources/stripped.dir
+com.somrik.expenseiq.app-debug-61 /Users/somrikbanerjee/Library/CloudStorage/GoogleDrive-somrik.banerjee@gmail.com/My Drive/Projects/ExpenseIQ/app/build/intermediates/merged_res/debug/mergeDebugResources
+com.somrik.expenseiq.app-debug-62 /Users/somrikbanerjee/Library/CloudStorage/GoogleDrive-somrik.banerjee@gmail.com/My Drive/Projects/ExpenseIQ/app/src/debug/res
+com.somrik.expenseiq.app-main-63 /Users/somrikbanerjee/Library/CloudStorage/GoogleDrive-somrik.banerjee@gmail.com/My Drive/Projects/ExpenseIQ/app/src/main/res

@@ -10,6 +10,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -38,17 +39,18 @@ fun GroupManagerScreen(
                         Icon(Icons.Default.Add, "Add")
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = SurfaceWhite),
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface),
                 windowInsets = WindowInsets(0, 0, 0, 0)
             )
-        }
+        },
+        containerColor = MaterialTheme.colorScheme.background
     ) { padding ->
         LazyColumn(Modifier.padding(padding).fillMaxSize()) {
             items(state.groups) { group ->
                 GroupItem(group) {
                     viewModel.deleteGroup(group)
                 }
-                HorizontalDivider(color = DividerGray, modifier = Modifier.padding(horizontal = 16.dp))
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, modifier = Modifier.padding(horizontal = 16.dp))
             }
         }
     }
@@ -62,19 +64,29 @@ private fun GroupItem(
     Row(
         Modifier
             .fillMaxWidth()
-            .background(SurfaceWhite)
+            .background(MaterialTheme.colorScheme.surface)
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Column(Modifier.weight(1f)) {
-            Text(group.name, fontSize = 15.sp, fontWeight = FontWeight.Medium)
-            Text(group.type, fontSize = 12.sp, color = TextSecondary)
+            Text(group.name, fontSize = 15.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface)
+            Text(
+                group.type,
+                fontSize = 12.sp,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                modifier = Modifier.alpha(0f)
+            )
         }
         
-        if (!group.isSystem) {
-            IconButton(onClick = onDelete) {
-                Icon(Icons.Default.Delete, "Delete", tint = TextSecondary, modifier = Modifier.size(20.dp))
-            }
+        IconButton(onClick = onDelete) {
+            Icon(Icons.Default.Delete, "Delete", tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f), modifier = Modifier.size(20.dp))
         }
+        
+        Icon(
+            Icons.Default.DragIndicator,
+            "Reorder",
+            tint = MaterialTheme.colorScheme.outlineVariant,
+            modifier = Modifier.size(24.dp).padding(4.dp)
+        )
     }
 }

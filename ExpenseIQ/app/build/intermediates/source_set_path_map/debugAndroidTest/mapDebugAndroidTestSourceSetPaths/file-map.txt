@@ -1,0 +1,36 @@
+com.somrik.expenseiq.test.app-profileinstaller-1.3.1-0 /Users/somrikbanerjee/.gradle/caches/8.13/transforms/04a3b04b4a55b4d69203dd0905578e63/transformed/profileinstaller-1.3.1/res
+com.somrik.expenseiq.test.app-lifecycle-viewmodel-ktx-2.8.4-1 /Users/somrikbanerjee/.gradle/caches/8.13/transforms/0c2bcb57bb0e9c5bb574602ec4e662b7/transformed/lifecycle-viewmodel-ktx-2.8.4/res
+com.somrik.expenseiq.test.app-ui-geometry-release-2 /Users/somrikbanerjee/.gradle/caches/8.13/transforms/0c3e32515d7dac7f1a61a9851c6eb389/transformed/ui-geometry-release/res
+com.somrik.expenseiq.test.app-core-runtime-2.2.0-3 /Users/somrikbanerjee/.gradle/caches/8.13/transforms/0f777d290e136c269cb94565feec5282/transformed/core-runtime-2.2.0/res
+com.somrik.expenseiq.test.app-ui-test-release-4 /Users/somrikbanerjee/.gradle/caches/8.13/transforms/11df4339e1790dcae2cdf8bff7d8477f/transformed/ui-test-release/res
+com.somrik.expenseiq.test.app-runtime-saveable-release-5 /Users/somrikbanerjee/.gradle/caches/8.13/transforms/34e467eae054ca448bf3d208de2a7c3f/transformed/runtime-saveable-release/res
+com.somrik.expenseiq.test.app-lifecycle-viewmodel-release-6 /Users/somrikbanerjee/.gradle/caches/8.13/transforms/3bc184f750d66a0e7b4047aeb6a82974/transformed/lifecycle-viewmodel-release/res
+com.somrik.expenseiq.test.app-ui-unit-release-7 /Users/somrikbanerjee/.gradle/caches/8.13/transforms/40895958b0508c020dc70be9c2433f91/transformed/ui-unit-release/res
+com.somrik.expenseiq.test.app-core-ktx-1.13.1-8 /Users/somrikbanerjee/.gradle/caches/8.13/transforms/435803afbb98ad14d381ab5ddd772bb7/transformed/core-ktx-1.13.1/res
+com.somrik.expenseiq.test.app-customview-poolingcontainer-1.0.0-9 /Users/somrikbanerjee/.gradle/caches/8.13/transforms/4d610cda9e218b6025054e38ade0580e/transformed/customview-poolingcontainer-1.0.0/res
+com.somrik.expenseiq.test.app-lifecycle-viewmodel-savedstate-2.8.4-10 /Users/somrikbanerjee/.gradle/caches/8.13/transforms/536cd6ef76143c6b8a8184a6a0ad9f40/transformed/lifecycle-viewmodel-savedstate-2.8.4/res
+com.somrik.expenseiq.test.app-ui-text-release-11 /Users/somrikbanerjee/.gradle/caches/8.13/transforms/54e596cbe9f53f5ce764e18fc756eaf7/transformed/ui-text-release/res
+com.somrik.expenseiq.test.app-lifecycle-runtime-release-12 /Users/somrikbanerjee/.gradle/caches/8.13/transforms/5765a1cb8d8694994df2a1684f898d30/transformed/lifecycle-runtime-release/res
+com.somrik.expenseiq.test.app-core-1.6.1-13 /Users/somrikbanerjee/.gradle/caches/8.13/transforms/59c8dbd3188a299ec7e6e62a76cdeca6/transformed/core-1.6.1/res
+com.somrik.expenseiq.test.app-savedstate-1.2.1-14 /Users/somrikbanerjee/.gradle/caches/8.13/transforms/6762803c495fad3880e6ae5c69782c3c/transformed/savedstate-1.2.1/res
+com.somrik.expenseiq.test.app-emoji2-1.3.0-15 /Users/somrikbanerjee/.gradle/caches/8.13/transforms/6c0dbd945676ab03b4fdb6fd1ff305ed/transformed/emoji2-1.3.0/res
+com.somrik.expenseiq.test.app-ui-test-junit4-release-16 /Users/somrikbanerjee/.gradle/caches/8.13/transforms/74d22b1f4ab671112dc6af111ed0e71c/transformed/ui-test-junit4-release/res
+com.somrik.expenseiq.test.app-ui-util-release-17 /Users/somrikbanerjee/.gradle/caches/8.13/transforms/76a977192d727ad729e09f5719f7b1a5/transformed/ui-util-release/res
+com.somrik.expenseiq.test.app-lifecycle-livedata-core-2.8.4-18 /Users/somrikbanerjee/.gradle/caches/8.13/transforms/7f04d73cbaf8c140a19513e8835e9fdb/transformed/lifecycle-livedata-core-2.8.4/res
+com.somrik.expenseiq.test.app-activity-ktx-1.9.1-19 /Users/somrikbanerjee/.gradle/caches/8.13/transforms/884854c68824bae9c363904a2958b421/transformed/activity-ktx-1.9.1/res
+com.somrik.expenseiq.test.app-activity-compose-1.9.1-20 /Users/somrikbanerjee/.gradle/caches/8.13/transforms/96a35ff40cba5a5fb748043f1009b48e/transformed/activity-compose-1.9.1/res
+com.somrik.expenseiq.test.app-lifecycle-process-2.8.4-21 /Users/somrikbanerjee/.gradle/caches/8.13/transforms/9be4ded0b3993f1bea24e24308da2421/transformed/lifecycle-process-2.8.4/res
+com.somrik.expenseiq.test.app-ui-release-22 /Users/somrikbanerjee/.gradle/caches/8.13/transforms/a79ed09c41bad9de7e5d3985aaed7a22/transformed/ui-release/res
+com.somrik.expenseiq.test.app-ui-graphics-release-23 /Users/somrikbanerjee/.gradle/caches/8.13/transforms/b0ee332ba2c308f70f3170697526139f/transformed/ui-graphics-release/res
+com.somrik.expenseiq.test.app-runtime-release-24 /Users/somrikbanerjee/.gradle/caches/8.13/transforms/b2b019cbb77ff240b92b31f345c9ec6c/transformed/runtime-release/res
+com.somrik.expenseiq.test.app-lifecycle-runtime-ktx-release-25 /Users/somrikbanerjee/.gradle/caches/8.13/transforms/b35763eb10e04cd2df60eecdf7470804/transformed/lifecycle-runtime-ktx-release/res
+com.somrik.expenseiq.test.app-activity-1.9.1-26 /Users/somrikbanerjee/.gradle/caches/8.13/transforms/b52ebc651190b9ea389d2045b30eed89/transformed/activity-1.9.1/res
+com.somrik.expenseiq.test.app-savedstate-ktx-1.2.1-27 /Users/somrikbanerjee/.gradle/caches/8.13/transforms/cb39dee3184b5918bb378af099b49fbb/transformed/savedstate-ktx-1.2.1/res
+com.somrik.expenseiq.test.app-startup-runtime-1.1.1-28 /Users/somrikbanerjee/.gradle/caches/8.13/transforms/d08671bcd31aad65e35d4929e5b5f0e4/transformed/startup-runtime-1.1.1/res
+com.somrik.expenseiq.test.app-annotation-experimental-1.4.0-29 /Users/somrikbanerjee/.gradle/caches/8.13/transforms/e0f2f629cb66109f7404a7342fadfaa0/transformed/annotation-experimental-1.4.0/res
+com.somrik.expenseiq.test.app-core-1.13.1-30 /Users/somrikbanerjee/.gradle/caches/8.13/transforms/e26c617799be5c595814abb34aac4c1f/transformed/core-1.13.1/res
+com.somrik.expenseiq.test.app-androidTest-31 /Users/somrikbanerjee/Library/CloudStorage/GoogleDrive-somrik.banerjee@gmail.com/My Drive/Projects/ExpenseIQ/app/build/generated/res/resValues/androidTest/debug
+com.somrik.expenseiq.test.app-updated_navigation_xml-32 /Users/somrikbanerjee/Library/CloudStorage/GoogleDrive-somrik.banerjee@gmail.com/My Drive/Projects/ExpenseIQ/app/build/generated/updated_navigation_xml/debugAndroidTest
+com.somrik.expenseiq.test.app-mergeDebugAndroidTestResources-33 /Users/somrikbanerjee/Library/CloudStorage/GoogleDrive-somrik.banerjee@gmail.com/My Drive/Projects/ExpenseIQ/app/build/intermediates/incremental/debugAndroidTest/mergeDebugAndroidTestResources/merged.dir
+com.somrik.expenseiq.test.app-mergeDebugAndroidTestResources-34 /Users/somrikbanerjee/Library/CloudStorage/GoogleDrive-somrik.banerjee@gmail.com/My Drive/Projects/ExpenseIQ/app/build/intermediates/incremental/debugAndroidTest/mergeDebugAndroidTestResources/stripped.dir
+com.somrik.expenseiq.test.app-debugAndroidTest-35 /Users/somrikbanerjee/Library/CloudStorage/GoogleDrive-somrik.banerjee@gmail.com/My Drive/Projects/ExpenseIQ/app/build/intermediates/merged_res/debugAndroidTest/mergeDebugAndroidTestResources
