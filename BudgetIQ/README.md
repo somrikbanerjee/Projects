@@ -1,23 +1,53 @@
 # BudgetIQ
 
-A personal budgeting web application for Indian cities. Enter your total available budget, and BudgetIQ uses a machine-learning model (Random Forest regression blended with city-specific cost-of-living baselines) to suggest how to split it across 12 spending categories. Fixed expenses — rent, loan EMI, and investment — are deducted first; the remainder is split intelligently across everything else.
+A personal budgeting web application for Indian cities. Enter your total available budget, and BudgetIQ uses a machine-learning model to suggest how to split it across 12 spending categories. Fixed expenses — rent, loan EMI, and investment — are deducted first; the remainder is split intelligently across everything else.
+
+The model trains on two signals: your past budget splits **and** your actual month-by-month spending imported automatically from Money Manager (ReadBytes) `.mmbak` backup files. Actual spending data is preferred over budgeted figures when both are available, so recommendations tighten with every month of real data.
 
 Supports 16 cities out of the box: Ahmedabad, Bangalore, Chandigarh, Chennai, Coimbatore, Delhi, Hyderabad, Indore, Jaipur, Kochi, Kolkata, Lucknow, Mumbai, Pune, Surat, Visakhapatnam.
 
 ## Features
 
-- **AI-suggested splits** — base city allocations for the first month, blending in your personal history as months accumulate, switching to full Random Forest regression at 3+ months
-- **Multi-city location support** — pick your city from 16 supported Indian cities; all cost-of-living baselines (rent, groceries, dining, petrol) are calibrated per city. Change city at any time in Settings; the choice persists across sessions
-- **Detect My Location** — one click in Settings uses the browser Geolocation API to auto-detect and select your current city
-- **Fixed-expense deductions** — investment (auto-escalating 10 % each April), loan EMI (active until a configurable end date), and a rent floor that guarantees your home allocation never drops below your rent amount
-- **Seasonal adjustments** — spending weights shift automatically for festive months (Diwali, New Year, summer travel, etc.)
-- **Live cost data** — CPI inflation and petrol prices are fetched each time you request a new prediction; results shown as a Live Cost Data card on the dashboard labelled with your active city
-- **Dashboard** — stat pills for total budget, investment, and rent; category splits with coloured progress bars; three right-column cards (Living Budget breakdown, allocation donut with leader-line labels, live cost data); month-over-month comparison chart; trend chart; recent months table; Update and Delete buttons for the current month's budget
-- **History** — full budget history with a total-budget trend line, stacked category allocation chart, and a detailed monthly breakdown table
-- **Settings** — configure location, rent amount, loan EMI amount, and EMI end date
-- **Indian number formatting** — all currency amounts display in the Indian comma convention (e.g. ₹1,30,000.00)
-- **Favicon & branding** — custom SVG bar-chart icon used as the browser favicon and in the navbar
-- **Background service** — ships as a macOS LaunchAgent; starts automatically at login and serves on `http://127.0.0.1:8080/` with no UI or notifications
+### Budget intelligence
+- **AI-suggested splits** — city base allocations for the first month, blending in your history as months accumulate, switching to a full CNN-GRU model at 3+ months
+- **1D-CNN + GRU model** — a 1D convolution layer captures short-term month-to-month patterns; a GRU processes the full sequence for long-range temporal dependencies. Trained fresh on every prediction call so it always reflects the latest data
+- **Actual-spending import** — each time you set a budget, the app finds the latest `.mmbak` file in `~/Google Drive/MoneyManager/`, opens it as a SQLite database, extracts the previous month's category expenses, and saves them as `MonthlyActual` records. These actuals become the training labels for the CNN-GRU (more accurate than intended budget splits)
+- **Model schedule**: 0 months → city base; 1–2 months → blend `(1−α)·base + α·actuals` (α = n/3); 3+ months → CNN-GRU weighted up to 0.85 at 12 months
+- **Seasonal adjustments** — spending weights shift automatically for festive and travel months
+- **Live cost data** — India CPI inflation and petrol prices fetched from the World Bank API on every prediction; per-city Numbeo-style rent, groceries, and restaurant indices applied as category multipliers
+
+### Fixed-expense handling
+- **Investment** — fixed at ₹50,000/month when budget ≥ ₹70,000; escalates 10% each April from FY 2026–27. Skipped automatically if it would leave less than rent after EMI
+- **Loan EMI** — fixed amount (₹28,168 default) deducted until a configurable end date, then zeroed automatically
+- **Rent floor** — home allocation is always ≥ your configured rent amount; any shortfall is redistributed proportionally from other categories
+
+### Dashboard
+- Stat pills: total budget, investment, rent
+- Category splits with coloured progress bars, percentages, and amounts
+- Right column: Living Budget card (total − investment − rent − EMI), allocation donut with leader-line labels, live cost data (CPI, petrol, indices)
+- **Previous month actual spending card** — always visible on the dashboard; shows the previous month's category breakdown (imported from `.mmbak`) even before the current month's budget is set
+- Month-over-month comparison chart: current budget vs previous budget and previous actuals side-by-side
+- Monthly budget trend chart; recent months table with paired Budget/Actual rows per month
+- Actuals-only months (imported but no budget set) appear in the Recent Months table with a `+` button to set a budget
+
+### History
+- Total budget vs actual spending trend chart (overlaid bar chart)
+- Category allocation trend chart with **Budget / Actual toggle** — switch between budgeted and actual percentage stacks
+- Full monthly detail table with paired Budget and Actual rows per month; actuals-only months included
+- Each actual row shows the source `.mmbak` filename for traceability
+- Edit and delete actions per month
+
+### Set Budget — Step 2 (AI suggestion screen)
+- Previous month's actual spending shown as a reference panel (category-by-category amounts and percentages) so you can compare while adjusting splits
+- Model info badge: base / blend / CNN-GRU, months of history, months confirmed by actuals
+- Fixed-expense breakdown: Budget − Investment − EMI = Spendable; rent floor shown
+- Live preview donut with leader-line labels; real-time percentage and amount updates
+
+### Other
+- **Multi-city support** — 16 Indian cities; all baselines calibrated per city. Change city in Settings at any time
+- **Detect My Location** — one-click auto-detect via browser Geolocation + Nominatim reverse-geocode
+- **Indian number formatting** — all amounts display in the Indian comma convention (₹1,30,000.00)
+- **Background service** — ships as a macOS LaunchAgent; starts at login, serves on `http://127.0.0.1:8080/`
 
 ## Tech Stack
 
@@ -25,35 +55,43 @@ Supports 16 cities out of the box: Ahmedabad, Bangalore, Chandigarh, Chennai, Co
 |---|---|
 | Language | Python 3.14 |
 | Web framework | Django 6.0.5 |
-| ML | scikit-learn 1.8 · numpy 2.4 |
+| ML | NumPy 2.4 (CNN-GRU implemented from scratch) |
 | Frontend | Bootstrap 5.3 · Bootstrap Icons 1.11 · Chart.js 4.4 |
-| Database | SQLite (default) |
+| Database | SQLite |
+| Backup parsing | Python `sqlite3` stdlib (reads `.mmbak` files directly) |
+
+> scikit-learn is no longer required — the CNN-GRU model is implemented in pure NumPy.
 
 ## Project Structure
 
 ```
 budgeting_tool/
 ├── budget/
-│   ├── models.py          # AppSettings, MonthlyBudget, BudgetSplit, CostSnapshot
-│   ├── views.py           # Dashboard, set-budget (2-step), history, settings, API
-│   ├── ml_engine.py       # Prediction engine — base allocations, Random Forest regression, seasonal logic
-│   ├── cost_data.py       # Live cost-data fetch (World Bank CPI, petrol estimate, Numbeo indices)
-│   ├── forms.py           # BudgetInputForm, SplitAdjustmentForm, AppSettingsForm
-│   ├── urls.py            # URL routing
+│   ├── models.py           # AppSettings, MonthlyBudget, BudgetSplit,
+│   │                       # MonthlyActual, ActualSplit, CostSnapshot
+│   ├── views.py            # Dashboard, set-budget (2-step), history, settings, API
+│   ├── ml_engine.py        # 1D-CNN + GRU prediction engine; load_history_from_db
+│   ├── cost_data.py        # Live cost-data fetch (World Bank, Numbeo baselines)
+│   ├── mmbak_importer.py   # Money Manager backup reader; actual-spending importer
+│   ├── forms.py            # BudgetInputForm, SplitAdjustmentForm, AppSettingsForm
+│   ├── urls.py             # URL routing
 │   ├── static/budget/
-│   │   └── favicon.svg    # Brand icon (bar chart, green/gold)
+│   │   └── favicon.svg     # Brand icon (bar chart, green/gold)
 │   ├── templatetags/
-│   │   └── budget_filters.py  # indian_number, get_item, get_field template filters
+│   │   └── budget_filters.py   # indian_number, get_item, get_field
 │   ├── templates/budget/
 │   │   ├── base.html
 │   │   ├── dashboard.html
 │   │   ├── set_budget.html
 │   │   ├── history.html
 │   │   └── settings.html
-│   └── management/commands/
-│       └── load_dummy_data.py
+│   └── migrations/
+│       ├── 0001_initial.py
+│       ├── 0002_appsettings_alter_budgetsplit_category.py
+│       ├── 0003_location_support.py
+│       └── 0004_monthly_actual.py
 └── budgeting_tool/
-    └── settings.py        # Django project settings
+    └── settings.py         # Django project settings
 ```
 
 ## Setup
@@ -67,19 +105,26 @@ python3 -m venv .venv
 source .venv/bin/activate      # Windows: .venv\Scripts\activate
 
 # 3. Install dependencies
-pip install django scikit-learn numpy requests
+pip install django numpy requests
 
 # 4. Apply migrations
 python manage.py migrate
 
-# 5. (Optional) Load sample data to see the app with pre-filled months
-python manage.py load_dummy_data
-
-# 6. Start the development server
+# 5. Start the development server
 python manage.py runserver 127.0.0.1:8080 --noreload
 ```
 
 Then open `http://127.0.0.1:8080/` in your browser.
+
+### Money Manager backup location
+
+BudgetIQ looks for `.mmbak` files in:
+
+```
+~/Library/CloudStorage/GoogleDrive-somrik.banerjee@gmail.com/My Drive/MoneyManager/
+```
+
+The most recently modified file in that directory is used automatically. No configuration needed — if the directory is empty or unavailable, the app falls back gracefully to location-base recommendations.
 
 ## Running as a background service (macOS)
 
@@ -114,30 +159,49 @@ The server runs with `--noreload` to prevent Django's file-watcher from polling 
 
 ## Usage
 
-1. **Dashboard** — the landing page shows the current month's budget (if set), split breakdown, and three cards on the right: a **Living Budget** card (total − investment − rent − loan EMI), the **Allocation donut**, and **Live Cost Data** (CPI, petrol, indices). Below that: historical charts and a recent months table.
-2. **Set Budget** — enter your total monthly income. The AI generates a suggested split; review and adjust percentages, then confirm to save.
-3. **History** — browse all saved months, edit or delete individual entries.
-4. **Settings** — select your city (dropdown or auto-detect), update your monthly rent, loan EMI amount, and the month/year the EMI ends. All cost-of-living data and ML suggestions update automatically to reflect the chosen city.
+1. **Dashboard** — landing page shows the current month's budget split (if set), Living Budget breakdown, allocation donut, and live cost data. The previous month's actual spending is always shown as a reference card. Below: MoM comparison chart, trend chart, and a Recent Months table with Budget/Actual paired rows.
+2. **Set Budget** — enter your total monthly income. BudgetIQ automatically imports the previous month's actuals from the latest `.mmbak` backup, retrains the CNN-GRU model on all available history, and generates a suggested split. The previous month's actuals are displayed as a reference panel while you review and adjust.
+3. **History** — all recorded months in a unified table (budget + actuals side by side); months with actuals but no budget also appear. Toggle the stacked chart between budgeted and actual allocations.
+4. **Settings** — select your city, update monthly rent, loan EMI amount, and EMI end date.
 
 ### How the model works
 
 | History available | Strategy |
 |---|---|
-| 0 months | City-specific base allocations (adjusted for season and live cost data) |
-| 1–2 months | Blend: `(1 − α) × base + α × rolling average`, where `α = n / 3` |
-| 3+ months | Random Forest regression on the 10 ML categories, blended with base at `min(n/12, 0.85)` weight |
+| 0 months | City-specific base allocations (seasonal + live cost adjustments) |
+| 1–2 months | Blend: `(1 − α) × base + α × actual/budget average`, α = n/3 |
+| 3+ months | 1D-CNN → GRU sequence model, blended with base at `min(n/12, 0.85)` weight |
 
-Investment and loan EMI are **fixed amounts** (not predicted); they are deducted before any split is computed. The home category has a **rent floor** — it will never be allocated less than your configured rent amount.
+For months where actual spending has been imported, the **actual** category percentages are used as training labels instead of the budgeted percentages. This means the model learns from real behaviour, not intentions.
+
+Investment and loan EMI are **fixed amounts** (not predicted); they are deducted before any split is computed. The home category has a **rent floor**.
+
+### Money Manager category mapping
+
+| Money Manager | BudgetIQ |
+|---|---|
+| 🛒 Groceries | Groceries |
+| 🚖 Transport | Transport |
+| 🍔 Food | Food |
+| ❤️ Healthcare | Healthcare |
+| 🏡 Home | Home |
+| 🎈 Entertainment | Entertainment |
+| 🔁 Subscriptions | Subscriptions |
+| 🛍 Shopping | Shopping |
+| 🧳 Travel | Travel |
+| 💲 Investment | Investment |
+| ⭕ Loan EMI | Loan EMI |
+| everything else | Other |
 
 ## API
 
 `GET /api/predict/?budget=<amount>&year=<year>&month=<month>`
 
-Returns predicted percentages and amounts for each category, plus investment, EMI, and rent values.
+Returns predicted percentages and amounts for each category, plus `history_count`, `history_with_actual`, investment, EMI, and rent values.
 
 `GET /api/detect-location/?lat=<latitude>&lon=<longitude>`
 
-Reverse-geocodes the supplied coordinates (via OpenStreetMap Nominatim) and returns the best-matching supported city name alongside the full list of supported cities.
+Reverse-geocodes the supplied coordinates (via OpenStreetMap Nominatim) and returns the best-matching supported city name alongside the full list.
 
 ```json
 { "city": "Bangalore", "supported_cities": ["Ahmedabad", "Bangalore", ...] }
@@ -148,3 +212,4 @@ Reverse-geocodes the supplied coordinates (via OpenStreetMap Nominatim) and retu
 - The `SECRET_KEY` in `settings.py` is the Django development default. Replace it before any deployment.
 - `DEBUG = True` by default — set to `False` and configure `ALLOWED_HOSTS` for production.
 - The database is SQLite (`db.sqlite3`) in the project root — suitable for single-user local use.
+- scikit-learn is no longer a dependency; remove it from your environment if previously installed.

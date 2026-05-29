@@ -8,16 +8,37 @@ from django.http import JsonResponse
 from django.utils import timezone
 from django.contrib import messages
 
-from .models import MonthlyBudget, BudgetSplit, AppSettings, CATEGORIES, CATEGORY_ICONS
+from .models import (
+    MonthlyBudget, BudgetSplit, MonthlyActual,
+    AppSettings, CATEGORIES, CATEGORY_ICONS,
+)
 from .forms import BudgetInputForm, SplitAdjustmentForm, AppSettingsForm
 from .ml_engine import get_prediction_for_month, pct_to_amounts, CATEGORIES as CATEGORY_KEYS
 from .cost_data import get_or_fetch_cost_snapshot, resolve_city_from_coords, SUPPORTED_CITIES
+from .mmbak_importer import import_actuals_for_month
 
 
 def _now_india():
     return timezone.now().astimezone(
         datetime.timezone(datetime.timedelta(hours=5, minutes=30))
     )
+
+
+# ── Shared helper — build actuals lookup ──────────────────────────────────────
+
+def _actuals_map(budget_qs):
+    """Return {(year, month): MonthlyActual} for the same months as budget_qs."""
+    pairs = [(mb.year, mb.month) for mb in budget_qs]
+    if not pairs:
+        return {}
+    from django.db.models import Q
+    q = Q()
+    for y, m in pairs:
+        q |= Q(year=y, month=m)
+    return {
+        (a.year, a.month): a
+        for a in MonthlyActual.objects.filter(q).prefetch_related('actual_splits')
+    }
 
 
 # ── Dashboard ────────────────────────────────────────────────────────────────
@@ -30,37 +51,81 @@ def dashboard(request):
                       .filter(year=year, month=month, is_dummy=False)
                       .prefetch_related('splits')
                       .first())
-    recent_budgets = (MonthlyBudget.objects
-                      .filter(is_dummy=False)
-                      .order_by('-year', '-month')
-                      .prefetch_related('splits')[:6])
 
+    # Recent budgets (up to 6), oldest first for charts
+    recent_budgets_qs = list(MonthlyBudget.objects
+                             .filter(is_dummy=False)
+                             .order_by('-year', '-month')
+                             .prefetch_related('splits')[:6])
+
+    # All actuals (up to 6 most recent) — covers months that may have no budget row
+    recent_actuals_qs = list(MonthlyActual.objects
+                             .order_by('-year', '-month')
+                             .prefetch_related('actual_splits')[:6])
+
+    # Build a unified ordered set of (year, month) across both sources
+    budget_months  = {(mb.year, mb.month): mb for mb in recent_budgets_qs}
+    actuals_by_month = {(ma.year, ma.month): ma for ma in recent_actuals_qs}
+    all_months = sorted(
+        set(budget_months) | set(actuals_by_month),
+        reverse=True,
+    )[:6]
+
+    # Build the combined recent-month rows for the template
+    recent_rows = []
+    for ym in reversed(all_months):   # oldest first for charts
+        mb = budget_months.get(ym)
+        ma = actuals_by_month.get(ym)
+        if mb:
+            mb.actual_data = ma
+        recent_rows.append({'budget': mb, 'actual': ma, 'year': ym[0], 'month': ym[1]})
+
+    # Keep recent_budgets for backward-compat chart data
     chart_labels, chart_totals = [], []
-    for mb in reversed(list(recent_budgets)):
-        chart_labels.append(mb.month_year_label)
-        chart_totals.append(float(mb.total_budget))
+    for row in recent_rows:
+        lbl = f"{calendar.month_abbr[row['month']]} {row['year']}"
+        chart_labels.append(lbl)
+        chart_totals.append(float(row['budget'].total_budget) if row['budget'] else 0)
 
-    # MoM comparison: current vs previous month (shown from Jun 2026 onwards)
+    # Previous month — needed for MoM and the reference panel
     prev_month = month - 1 if month > 1 else 12
     prev_year  = year if month > 1 else year - 1
-    prev_budget = (MonthlyBudget.objects
-                   .filter(year=prev_year, month=prev_month, is_dummy=False)
-                   .prefetch_related('splits')
-                   .first())
+    prev_budget = budget_months.get((prev_year, prev_month)) or (
+        MonthlyBudget.objects
+        .filter(year=prev_year, month=prev_month, is_dummy=False)
+        .prefetch_related('splits').first()
+    )
+    prev_actual = actuals_by_month.get((prev_year, prev_month)) or (
+        MonthlyActual.objects
+        .filter(year=prev_year, month=prev_month)
+        .prefetch_related('actual_splits').first()
+    )
 
+    # MoM comparison chart — current budget vs prev budget (+prev actual if available)
     mom_data = None
     if current_budget and prev_budget:
         curr_splits = {s.category: float(s.amount) for s in current_budget.splits.all()}
         prev_splits = {s.category: float(s.amount) for s in prev_budget.splits.all()}
-        mom_cat_labels = [label for _, label in CATEGORIES]
-        mom_curr = [curr_splits.get(cat, 0) for cat, _ in CATEGORIES]
-        mom_prev = [prev_splits.get(cat, 0) for cat, _ in CATEGORIES]
+        prev_act    = ({s.category: float(s.amount) for s in prev_actual.actual_splits.all()}
+                       if prev_actual else None)
         mom_data = {
-            'labels':       json.dumps(mom_cat_labels),
-            'curr':         json.dumps(mom_curr),
-            'prev':         json.dumps(mom_prev),
+            'labels':       json.dumps([label for _, label in CATEGORIES]),
+            'curr':         json.dumps([curr_splits.get(cat, 0) for cat, _ in CATEGORIES]),
+            'prev':         json.dumps([prev_splits.get(cat, 0) for cat, _ in CATEGORIES]),
             'curr_label':   current_budget.month_year_label,
             'prev_label':   prev_budget.month_year_label,
+        }
+        if prev_act:
+            mom_data['prev_actual']       = json.dumps([prev_act.get(cat, 0) for cat, _ in CATEGORIES])
+            mom_data['prev_actual_label'] = f"{prev_budget.month_year_label} Actual"
+
+    # Prev-actual reference panel — shown even if no current budget
+    prev_actual_ref = None
+    if prev_actual:
+        prev_actual_ref = {
+            'label':  f"{calendar.month_abbr[prev_month]} {prev_year}",
+            'total':  prev_actual.total_actual,
+            'splits': {s.category: s for s in prev_actual.actual_splits.all()},
         }
 
     settings = AppSettings.get()
@@ -77,21 +142,22 @@ def dashboard(request):
                           - settings.rent_amount)
 
     context = {
-        'current_budget': current_budget,
+        'current_budget':   current_budget,
         'year': year, 'month': month,
-        'month_name': calendar.month_name[month],
-        'recent_budgets': recent_budgets,
-        'chart_labels': json.dumps(chart_labels),
-        'chart_totals': json.dumps(chart_totals),
-        'mom_data': mom_data,
-        'category_icons': CATEGORY_ICONS,
-        'categories': CATEGORIES,
-        'settings': settings,
-        'location': settings.location,
-        'cost_snapshot': cost_snapshot,
-        'living_budget': living_budget,
-        'investment_amt': investment_amt,
-        'emi_amt': emi_amt,
+        'month_name':       calendar.month_name[month],
+        'recent_rows':      recent_rows,
+        'chart_labels':     json.dumps(chart_labels),
+        'chart_totals':     json.dumps(chart_totals),
+        'mom_data':         mom_data,
+        'prev_actual_ref':  prev_actual_ref,
+        'category_icons':   CATEGORY_ICONS,
+        'categories':       CATEGORIES,
+        'settings':         settings,
+        'location':         settings.location,
+        'cost_snapshot':    cost_snapshot,
+        'living_budget':    living_budget,
+        'investment_amt':   investment_amt,
+        'emi_amt':          emi_amt,
     }
     return render(request, 'budget/dashboard.html', context)
 
@@ -110,11 +176,20 @@ def set_budget(request, year=None, month=None):
     if (request.method == 'POST'
             and 'total_budget' in request.POST
             and 'pct_groceries' not in request.POST):
-        # Step 1 → compute AI suggestion
+        # Step 1 → import previous month's actuals, then compute AI suggestion
         form = BudgetInputForm(request.POST)
         if form.is_valid():
             total_budget = float(form.cleaned_data['total_budget'])
-            prediction = get_prediction_for_month(total_budget, year, month, force_refresh=True)
+
+            # Always pull the latest .mmbak and import actuals for the
+            # month *before* the one being budgeted, so the model retrains
+            # on the freshest spending data before making a recommendation.
+            prev_month = month - 1 if month > 1 else 12
+            prev_year  = year if month > 1 else year - 1
+            import_actuals_for_month(prev_year, prev_month)
+
+            prediction = get_prediction_for_month(total_budget, year, month,
+                                                  force_refresh=True)
 
             initial = {
                 'year': year, 'month': month,
@@ -128,6 +203,19 @@ def set_budget(request, year=None, month=None):
             splits_display = _build_splits_display(
                 prediction['percentages'], prediction['amounts']
             )
+
+            # Fetch previous month actuals for the "vs last month actual" info
+            prev_actual = (MonthlyActual.objects
+                           .filter(year=prev_year, month=prev_month)
+                           .prefetch_related('actual_splits')
+                           .first())
+            prev_actual_splits = None
+            if prev_actual:
+                prev_actual_splits = {
+                    s.category: {'amount': float(s.amount), 'pct': float(s.percentage)}
+                    for s in prev_actual.actual_splits.all()
+                }
+
             return render(request, 'budget/set_budget.html', {
                 'step': 2,
                 'input_form': form,
@@ -137,6 +225,7 @@ def set_budget(request, year=None, month=None):
                 'month_name': calendar.month_name[month],
                 'splits_display': splits_display,
                 'history_count': prediction['history_count'],
+                'history_with_actual': prediction['history_with_actual'],
                 'cost_snapshot': prediction['cost_snapshot'],
                 'investment_amount': prediction['investment'],
                 'emi_amount': prediction['emi'],
@@ -145,6 +234,12 @@ def set_budget(request, year=None, month=None):
                 'inv_params': prediction['inv_params'],
                 'category_icons': CATEGORY_ICONS,
                 'categories': CATEGORIES,
+                'prev_actual': prev_actual,
+                'prev_actual_splits': prev_actual_splits,
+                'prev_month_label': (
+                    f"{calendar.month_abbr[prev_month]} {prev_year}"
+                    if prev_actual else None
+                ),
             })
         adj_form = None
 
@@ -211,29 +306,67 @@ def set_budget(request, year=None, month=None):
 # ── History ──────────────────────────────────────────────────────────────────
 
 def history(request):
-    budgets = (MonthlyBudget.objects
-               .filter(is_dummy=False)
-               .prefetch_related('splits')
-               .order_by('-year', '-month'))
-    recent  = list(reversed(list(budgets[:12])))
+    budgets_qs = list(MonthlyBudget.objects
+                      .filter(is_dummy=False)
+                      .prefetch_related('splits')
+                      .order_by('-year', '-month'))
+    actuals_qs = list(MonthlyActual.objects
+                      .prefetch_related('actual_splits')
+                      .order_by('-year', '-month'))
 
-    chart_labels     = [mb.month_year_label for mb in recent]
-    category_series  = {}
+    budget_map  = {(mb.year, mb.month): mb for mb in budgets_qs}
+    actuals_map = {(ma.year, ma.month): ma for ma in actuals_qs}
+
+    # Attach actual_data to each budget row
+    for mb in budgets_qs:
+        mb.actual_data = actuals_map.get((mb.year, mb.month))
+
+    # Build unified month list: budget months + actuals-only months, newest first
+    all_months = sorted(
+        set(budget_map) | set(actuals_map),
+        reverse=True,
+    )
+
+    # Combined rows for the detail table
+    history_rows = []
+    for ym in all_months:
+        mb = budget_map.get(ym)
+        ma = actuals_map.get(ym)
+        if mb:
+            mb.actual_data = ma
+        history_rows.append({'budget': mb, 'actual': ma, 'year': ym[0], 'month': ym[1]})
+
+    # Chart uses the last 12 months (oldest first)
+    recent_rows = list(reversed(history_rows[:12]))
+    chart_labels = [f"{calendar.month_abbr[r['month']]} {r['year']}" for r in recent_rows]
+
+    category_series, actual_series = {}, {}
     for cat, label in CATEGORIES:
-        series = []
-        for mb in recent:
-            split = mb.splits.filter(category=cat).first()
-            series.append(float(split.percentage) if split else 0.0)
-        category_series[label] = series
-    total_series = [float(mb.total_budget) for mb in recent]
+        bseries, aseries = [], []
+        for r in recent_rows:
+            mb, ma = r['budget'], r['actual']
+            split = mb.splits.filter(category=cat).first() if mb else None
+            bseries.append(float(split.percentage) if split else 0.0)
+            if ma:
+                as_ = ma.actual_splits.filter(category=cat).first()
+                aseries.append(float(as_.percentage) if as_ else 0.0)
+            else:
+                aseries.append(None)
+        category_series[label] = bseries
+        actual_series[label]   = aseries
+
+    total_series  = [float(r['budget'].total_budget) if r['budget'] else 0 for r in recent_rows]
+    actual_totals = [float(r['actual'].total_actual) if r['actual'] else None for r in recent_rows]
 
     return render(request, 'budget/history.html', {
-        'budgets': budgets,
-        'chart_labels': json.dumps(chart_labels),
-        'category_series': json.dumps(category_series),
-        'total_series': json.dumps(total_series),
-        'categories': CATEGORIES,
-        'category_icons': CATEGORY_ICONS,
+        'history_rows':     history_rows,
+        'chart_labels':     json.dumps(chart_labels),
+        'category_series':  json.dumps(category_series),
+        'actual_series':    json.dumps(actual_series),
+        'total_series':     json.dumps(total_series),
+        'actual_totals':    json.dumps([v if v is not None else 'null' for v in actual_totals]),
+        'categories':       CATEGORIES,
+        'category_icons':   CATEGORY_ICONS,
     })
 
 
@@ -284,6 +417,7 @@ def api_predict(request):
         return JsonResponse({
             'splits': result,
             'history_count': prediction['history_count'],
+            'history_with_actual': prediction['history_with_actual'],
             'investment': prediction['investment'],
             'emi': prediction['emi'],
             'rent': prediction['rent'],
@@ -308,10 +442,6 @@ def delete_budget(request, year, month):
 # ── Detect Location ───────────────────────────────────────────────────────────
 
 def api_detect_location(request):
-    """
-    Accepts lat/lon query params, reverse-geocodes via Nominatim, and returns
-    the best-matching supported city name.
-    """
     try:
         lat = float(request.GET.get('lat', ''))
         lon = float(request.GET.get('lon', ''))

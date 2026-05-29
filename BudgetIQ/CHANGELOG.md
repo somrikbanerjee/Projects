@@ -9,147 +9,166 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [1.0.0] — 2026-05-29
+
+### Added
+
+- **Money Manager backup importer** (`budget/mmbak_importer.py`) — reads `.mmbak` files (ReadBytes Money Manager Android exports) directly as SQLite databases. Finds the most recently modified file in `~/Google Drive/MoneyManager/`, extracts expense transactions for a given month by category, and upserts results into the new `MonthlyActual` / `ActualSplit` models. One record per month; newer imports overwrite older ones so the latest data always wins.
+
+- **`MonthlyActual` and `ActualSplit` models** — parallel to `MonthlyBudget` / `BudgetSplit`; store actual category spending imported from `.mmbak` backups. `ActualSplit` records include amount, percentage, and normalised percentage (sums to exactly 100). Source filename stored for traceability. Migration `0004_monthly_actual` applied.
+
+- **Automatic actuals import on budget set** — when the user enters a total budget in Step 1 of the Set Budget flow, the app automatically imports the previous month's actuals from the latest `.mmbak` before computing the AI suggestion. This ensures the model always retrains on the most recent real spending data before making a recommendation.
+
+- **Previous month actuals reference panel on Set Budget Step 2** — a gold-bordered card above the split sliders shows the previous month's actual category breakdown (amounts and percentages). Lets the user compare real prior spending against the AI suggestion while adjusting.
+
+- **Previous month actuals card on Dashboard** — a "Apr 2026 — Actual Spending" style card is always visible on the dashboard, displayed with progress bars for each category. Appears even before the current month's budget is set, giving immediate context.
+
+- **Actuals-only months in Recent Months table and History** — months where spending was imported from `.mmbak` but no budget was explicitly set now appear in both the dashboard Recent Months table and the History page. Each such row shows a gold "Actual" badge and a `+` button to set a budget for that month.
+
+- **Paired Budget/Actual rows in all tables** — dashboard Recent Months and History detail table show a green "Budget" row and gold "Actual" row for each month where both exist. The month label cell spans both rows.
+
+- **Budget vs Actual total trend chart in History** — overlaid bar chart showing budgeted total (green) and actual total (gold) for the last 12 months side by side.
+
+- **Budget / Actual toggle on History stacked chart** — two buttons switch the stacked category allocation chart between budgeted percentages and actual percentages.
+
+- **MoM comparison chart extended** — when previous month actuals are available, a third dashed bar series is added to the Month-over-Month comparison chart on the dashboard.
+
+- **`history_with_actual` in prediction response** — `get_prediction_for_month` now returns the count of history months that have confirmed actual spending, exposed in the API response and shown in the model info badge on Set Budget Step 2.
+
+### Changed
+
+- **ML model replaced: Random Forest → 1D-CNN + GRU** — the per-category Random Forest regressor is replaced by a two-stage sequence model implemented in pure NumPy (no scikit-learn dependency):
+  - **1D-CNN (kernel=3, 8 filters, ReLU)** — convolves over the time axis to capture short-term month-to-month transition patterns.
+  - **GRU (hidden=16)** — processes the convolved sequence to build a hidden state encoding long-range temporal dependencies (trend, drift, sustained seasonality).
+  - **Linear readout** — maps the final GRU hidden state to a scalar allocation prediction per ML category.
+  - Trained with ADAM (lr=3e-3, 200 epochs) and truncated BPTT (4 steps). Gradient clipping at norm 1.0.
+  - For months with both a budget record and imported actuals, **actual percentages are used as training labels** (more accurate than intended splits). Actuals-only months (no budget row) are also included in training history.
+
+- **`load_history_from_db`** now merges `MonthlyBudget` and `MonthlyActual` records. For months that have actuals, the actual split percentages replace the budget split percentages as the ML training signal. Actuals-only months are included with `total_actual` used as the budget proxy for feature engineering.
+
+- **Dashboard view** rebuilt to unify budget and actuals data: queries both `MonthlyBudget` and `MonthlyActual` for recent months, merges them into a single `recent_rows` list (oldest-first for charts), and exposes `prev_actual_ref` for the reference card independently of whether a current budget exists.
+
+- **History view** rebuilt to include actuals-only months: queries both models, builds a unified `history_rows` list (newest-first), and computes both `category_series` (budget %) and `actual_series` (actual %) for the chart toggle.
+
+- **`cat-amt` CSS** — `width: 90px` → `min-width: 110px; white-space: nowrap` so large Indian-formatted amounts (e.g. ₹2,04,426.13) never wrap to a second line.
+
+- scikit-learn is no longer a dependency.
+
+### Fixed
+
+- Django template error "Variables and attributes may not begin with underscores" — dynamic attribute set in the view renamed from `mb._actual` to `mb.actual_data`.
+
+---
+
 ## [0.9.0] — 2026-05-28
 
 ### Added
-- **Multi-city location support** — cost-of-living data, petrol prices, rent/groceries/restaurant indices, and ML budget suggestions are now calibrated per city rather than fixed to Hyderabad. 16 Indian cities are supported out of the box: Ahmedabad, Bangalore, Chandigarh, Chennai, Coimbatore, Delhi, Hyderabad, Indore, Jaipur, Kochi, Kolkata, Lucknow, Mumbai, Pune, Surat, Visakhapatnam.
-- **Location picker in Settings** — a new section at the top of the Settings page shows the currently active city and a dropdown to switch to any supported city. The choice is saved with the rest of the settings form and persists across sessions.
-- **"Detect My Location" button** — uses the browser Geolocation API to obtain the device's coordinates, then calls the new `/api/detect-location/` endpoint to reverse-geocode them (via OpenStreetMap Nominatim) to the best-matching supported city. The result is auto-populated in the dropdown; the user can still override it before saving.
-- **`/api/detect-location/` endpoint** — `GET /api/detect-location/?lat=<lat>&lon=<lon>` accepts coordinates, calls Nominatim with a `User-Agent` header, resolves the city name (including alias handling for Bengaluru → Bangalore, New Delhi → Delhi, etc.), and returns `{ "city": "<name>", "supported_cities": [...] }`.
-- **`CITY_BASELINES` dict in `cost_data.py`** — per-city calibrated baselines (rent index, groceries index, restaurant index, 2024 petrol base price, inflation fallback) sourced from Numbeo 2025–2026 surveys and state-level petrol pricing data.
-- **`resolve_city_from_coords(lat, lon)`** in `cost_data.py` — reverse-geocodes coordinates and maps to a supported city with alias normalisation.
-- **`location` field on `AppSettings`** — `CharField(max_length=100, default='Hyderabad')`; the singleton row persists the selected city.
-- **`location` field on `CostSnapshot`** — each city gets its own monthly snapshot cache; `unique_together` changed from `(year, month)` to `(year, month, location)`.
+- **Multi-city location support** — cost-of-living data, petrol prices, rent/groceries/restaurant indices, and ML budget suggestions are now calibrated per city rather than fixed to Hyderabad. 16 Indian cities supported: Ahmedabad, Bangalore, Chandigarh, Chennai, Coimbatore, Delhi, Hyderabad, Indore, Jaipur, Kochi, Kolkata, Lucknow, Mumbai, Pune, Surat, Visakhapatnam.
+- **Location picker in Settings** — dropdown to switch to any supported city; choice persists across sessions.
+- **"Detect My Location" button** — browser Geolocation API → `/api/detect-location/` → Nominatim reverse-geocode → best-matching supported city auto-populated.
+- **`/api/detect-location/` endpoint** — `GET /api/detect-location/?lat=<lat>&lon=<lon>` returns `{ "city": "<name>", "supported_cities": [...] }`.
+- **`CITY_BASELINES` dict** in `cost_data.py` — per-city calibrated baselines from Numbeo 2025–2026 surveys and state petrol pricing.
+- **`resolve_city_from_coords(lat, lon)`** in `cost_data.py` — reverse-geocodes with alias normalisation (Bengaluru → Bangalore, etc.).
+- **`location` field on `AppSettings`** and **`CostSnapshot`**; `unique_together` on `CostSnapshot` updated to `(year, month, location)`. Migration `0003_location_support` applied.
 
 ### Changed
-- `fetch_live_cost_data`, `get_or_fetch_cost_snapshot`, and `cost_snapshot_to_adjustments` all accept a `city` parameter and use that city's baseline instead of the hardcoded Hyderabad values.
-- `get_prediction_for_month` in `ml_engine.py` reads `settings.location` and passes it through to the cost snapshot and adjustment functions so ML suggestions reflect the active city's cost structure.
-- Dashboard subtitle ("Hyderabad Budget Intelligence"), empty-state text, Live Cost Data card header, and petrol price label are now dynamic — they render the active location name from context.
-- Base page `<title>` tag no longer hardcodes "Hyderabad"; footer text updated to remove the city reference.
-- Migration `0003_location_support` applied.
+- `fetch_live_cost_data`, `get_or_fetch_cost_snapshot`, `cost_snapshot_to_adjustments`, and `get_prediction_for_month` all accept and propagate a `city` parameter.
+- Dashboard subtitle, empty-state text, cost data card label, and petrol price label render the active location name dynamically.
 
 ---
 
 ## [0.8.0] — 2026-05-28
 
 ### Changed
-- **ML model upgraded from Ridge to Random Forest** — `_train` in `ml_engine.py` now uses `sklearn.ensemble.RandomForestRegressor` (`n_estimators=100`, `max_depth=4`, `random_state=42`) instead of a `Ridge + PolynomialFeatures + StandardScaler` pipeline. Random Forest captures non-linear patterns in spending behaviour (e.g. festive-season spikes, budget-level thresholds) that Ridge could not model. The `PolynomialFeatures` and `StandardScaler` pre-processing steps are removed as tree-based models are scale- and polynomial-invariant. The existing base-blend weighting (`min(n/12, 0.85)`), lag features, and rent-floor logic are unchanged.
+- **ML model upgraded from Ridge to Random Forest** — `_train` uses `RandomForestRegressor` (`n_estimators=100`, `max_depth=4`) instead of a Ridge + PolynomialFeatures + StandardScaler pipeline. Captures non-linear festive-season and budget-threshold patterns. *(Superseded by CNN-GRU in v1.0.0.)*
 
 ---
 
 ## [0.7.0] — 2026-05-28
 
 ### Added
-- **Favicon** — custom SVG bar-chart icon (`budget/static/budget/favicon.svg`, ascending bars in brand green and gold on a dark rounded background) registered as `<link rel="icon">` in `base.html`. Replaces the browser-generated "1" placeholder that appeared when bookmarking `127.0.0.1`.
-- **Navbar brand icon** — the same SVG is used as an `<img>` in the navbar to the left of "BudgetIQ", keeping the header and browser tab/sidebar icon identical.
-- **Delete current budget button** on dashboard — a red "Delete" button appears beside "Update Budget" whenever a budget exists for the current month. Clicking shows a browser confirmation dialog before submitting a POST to the existing `delete_budget` view. After deletion the user is returned to the dashboard (empty state) rather than History, via a `next=dashboard` POST parameter.
-- **macOS background service** — `~/Library/LaunchAgents/com.budgetiq.server.plist` runs the app silently at login on `http://127.0.0.1:8080/` with `KeepAlive`, `ThrottleInterval 30`, and log output to `~/Library/Logs/BudgetIQ/server.log`. No terminal window or notifications.
+- **Favicon** — custom SVG bar-chart icon in `budget/static/budget/favicon.svg`; used in `<link rel="icon">` and the navbar brand image.
+- **Delete current budget button** on dashboard — red button with confirmation dialog; redirects back to dashboard via `next=dashboard` POST parameter.
+- **macOS background service** — `~/Library/LaunchAgents/com.budgetiq.server.plist`; runs at login on `http://127.0.0.1:8080/` with `KeepAlive`, `ThrottleInterval 30`, log to `~/Library/Logs/BudgetIQ/server.log`.
 
 ### Fixed
-- Allocation donut was rendering very small because the canvas had a hard `max-height: 180px` while the flex card grew around it. Fixed by making the card `d-flex flex-column`, setting the card-body to `flex: 1; min-height: 0; position: relative`, removing the canvas size constraint, and enabling `maintainAspectRatio: false` on the Chart.js config so the donut fills the full available card height.
+- Allocation donut rendering too small due to hard `max-height: 180px` on canvas. Fixed with `d-flex flex-column` card, `flex: 1; min-height: 0; position: relative` on body, `maintainAspectRatio: false`.
 
 ### Changed
-- `layout.padding` on the dashboard Allocation donut increased from 38 → 50 to give leader-line labels more space at the larger rendered size.
-- `delete_budget` view now reads a `next` POST/GET parameter and redirects to `dashboard` or `history` accordingly (validated against an allowlist).
-- `{% load static %}` added to `base.html`; Bootstrap icon `bi-graph-up-arrow` in the navbar brand replaced with the SVG favicon image.
+- `layout.padding` on Allocation donut: 38 → 50 to give leader-line labels more space.
+- `delete_budget` view reads `next` POST/GET parameter and redirects to `dashboard` or `history` (allowlisted).
 
 ---
 
 ## [0.6.0] — 2026-05-28
 
 ### Added
-- **Living Budget card on dashboard** — new card above the Allocation donut showing the discretionary spending budget: Total Budget − Investment − Rent − Loan EMI. Displays the resulting amount prominently in gold with a compact formula breakdown below it (each fixed deduction labelled inline).
-- Right column of the dashboard split breakdown is now a flex column (`d-flex flex-column`) whose three cards — Living Budget, Allocation, Live Cost Data — fill the full height of the adjacent Category Splits card.
+- **Living Budget card** on dashboard — Total Budget − Investment − Rent − Loan EMI displayed prominently in gold with inline formula breakdown.
+- Right column of split breakdown is now a flex column; Living Budget, Allocation, and Live Cost Data cards fill the full height.
 
 ### Changed
-- `dashboard` view now prefetches `splits` on `current_budget` and computes `living_budget`, `investment_amt`, and `emi_amt` in Python before passing them to the template.
-- Allocation donut canvas height reduced to 180 px (from 220 px) to accommodate the Living Budget card above it.
+- `dashboard` view computes `living_budget`, `investment_amt`, `emi_amt` in Python.
 
 ---
 
 ## [0.5.0] — 2026-05-28
 
 ### Added
-- **Live Cost Data card on dashboard** — CPI inflation, petrol price, rent index, and groceries index now shown below the Allocation donut whenever a budget is set for the current month.
-- **Force-refresh cost data on prediction** — every time "Get AI Split Suggestion" is clicked, the cached cost snapshot for that month is deleted and re-fetched from live sources; the ML model is re-trained on all saved history in the same call.
-- **Indian number formatting** — all displayed currency amounts now use the Indian comma convention (e.g. ₹1,30,000.00) via a custom `indian_number` Django template filter across all pages (dashboard, set budget, history, settings).
-- `{% load budget_filters %}` added to `settings.html`.
-
-### Changed
-- Allocation donut on dashboard reduced from 280 px to 220 px to accommodate the new cost data card below it.
-- Allocation donut is no longer `h-100` (full-height card), giving it a more compact appearance.
+- **Live Cost Data card** on dashboard — CPI inflation, petrol price, rent index, groceries index.
+- **Force-refresh cost data** on every "Get AI Split Suggestion" click.
+- **Indian number formatting** — `indian_number` template filter across all pages.
 
 ---
 
 ## [0.4.0] — 2026-05-27
 
 ### Added
-- **12-colour category palette** — each of the 12 categories now has a visually distinct colour (emerald, amber, cornflower, coral, violet, orange, teal, magenta-pink, terracotta, periwinkle, silver-grey, slate); replaces the earlier palette where Home and Groceries shared the same green and two categories shared pink.
-- **Leader-line labels on both donuts** — the Allocation donut (dashboard) and Live Preview donut (set budget) now draw labelled leader lines (radial line → horizontal line → filled-circle arrowhead → label text) for every segment ≥ 5 %. Left-side labels are clamped to the canvas edge and shifted upward if they would overflow.
-- **Rent stat pill** on dashboard shows the exact configured `rent_amount` with label "Rent" and sub-text "per month".
-- **`step: '0.01'`** on all currency and percentage input fields so two-decimal values are accepted without browser validation warnings.
-- **Fixed EMI amount computation** — the Loan EMI category amount is derived from the fixed `emi_amount` setting rather than back-computing from the rounded percentage, eliminating the ₹3 rounding error (e.g. ₹28,171 vs ₹28,168).
+- **12-colour category palette** — each category has a visually distinct colour via `c1`–`c12` CSS classes.
+- **Leader-line labels** on dashboard Allocation donut and Set Budget Live Preview donut for segments ≥ 5 %.
+- **Rent stat pill** on dashboard.
+- **`step: '0.01'`** on all currency/percentage inputs.
+- **Fixed EMI amount computation** — derived from `emi_amount` setting, not back-computed from percentage (eliminates ₹3 rounding error).
 
 ### Fixed
-- Bootstrap 5.3 table cell colour was rendering black due to the high-specificity `--bs-table-color` CSS variable. Fixed by overriding `--bs-table-color`, `--bs-table-striped-color`, and `--bs-table-hover-color` on `.table`, plus adding `.table > :not(caption) > * > * { color: var(--fin-text); }` to win the cascade.
-- Category Splits progress bars were misaligned because `cat-name` used `flex: 1`. Fixed with explicit `width: 115px; flex-shrink: 0` on `cat-name` and `width: 90px; flex-shrink: 0` on `cat-amt`.
-- Leader-line label for large left-side segments (e.g. Loan EMI at ~33 %) was cropped at the canvas left edge. Fixed by clamping `tx` to `labelWidth + 6` and shifting the label up 10 px when it would overflow.
-
-### Changed
-- Progress bar CSS class names changed from ad-hoc colour names to `c1`–`c12` to match the new 12-colour system.
-- Text muted colour brightened: `--fin-muted: #adbac7`, `--fin-text-soft: #dde3ea`.
+- Bootstrap 5 table cell colour rendering black (overrode `--bs-table-color` cascade).
+- Category Splits progress bar misalignment — explicit `width: 115px` on `cat-name`, `width: 90px` on `cat-amt`.
+- Leader-line label cropped at canvas left edge for large left-side segments — clamped `tx` and shifted label up 10 px.
 
 ---
 
 ## [0.3.0] — 2026-05-26
 
 ### Added
-- **AppSettings model** — stores `rent_amount`, `emi_amount`, `emi_end_year`, `emi_end_month`; singleton row enforced via `update_or_create`.
-- **Loan EMI category** — 12th category `emi` added alongside the existing 11. Fixed amount (₹28,168 default) deducted from total budget before any ML split is computed. EMI is automatically zeroed after the configured end month.
-- **Investment auto-escalation** — fixed investment amount (₹50,000 default) escalates 10 % each April from FY 2026–27 onward. Investment is skipped entirely if the budget is too low to cover rent after paying investment + EMI.
-- **Rent floor** — home allocation is guaranteed to be at least `rent_amount`; shortfall is distributed proportionally across other ML categories.
-- **Settings page** (`/settings/`) — form to update rent, EMI amount, and EMI end date; read-only summary of the current investment rule.
-- **Fixed-expense breakdown bar** on set-budget step 2 — shows Budget − Investment − Loan EMI = Spendable, plus the home rent floor.
-- **Month-over-month comparison chart** on dashboard — grouped bar chart comparing current vs previous month's category amounts (shown from the second recorded month onward).
-- **`is_dummy` flag** on `MonthlyBudget` — seed/test records are marked `is_dummy=True`; all dashboard, history, and recent-months queries filter to `is_dummy=False` only.
-
-### Changed
-- `get_prediction_for_month` returns `investment`, `emi`, `rent`, and `inv_params` so the set-budget view can display exact fixed amounts.
-- `pct_to_amounts` derives investment and EMI from fixed amounts (not from percentages) to avoid rounding drift.
+- **`AppSettings` model** — `rent_amount`, `emi_amount`, `emi_end_year`, `emi_end_month`; singleton row.
+- **Loan EMI category** — 12th category; fixed amount deducted before ML split.
+- **Investment auto-escalation** — 10 % each April from FY 2026–27; skipped if budget too low to cover rent.
+- **Rent floor** — home ≥ `rent_amount`; shortfall redistributed proportionally.
+- **Settings page** (`/settings/`) — rent, EMI amount, EMI end date form.
+- **Fixed-expense breakdown bar** on Set Budget Step 2.
+- **Month-over-month comparison chart** on dashboard.
+- **`is_dummy` flag** on `MonthlyBudget`; all user-facing queries filter `is_dummy=False`.
 
 ---
 
 ## [0.2.0] — 2026-05-25
 
 ### Added
-- **ML prediction engine** (`ml_engine.py`):
-  - 0 months of history → Hyderabad base allocations.
-  - 1–2 months → blended rolling average weighted by `α = n / 3`.
-  - 3+ months → per-category Ridge regression (scikit-learn) with polynomial features, standard scaling, seasonal lag features, and a base-blend cap of 0.85. *(Upgraded to Random Forest in v0.8.0.)*
-- **Seasonal multipliers** for months 1, 3, 4, 7, 8, 10, 11, 12 covering shopping, travel, entertainment, food, and groceries.
-- **Live cost data** (`cost_data.py`) — fetches India CPI and inflation from the World Bank API, estimates Hyderabad petrol price, and computes Numbeo-style rent/groceries/restaurant indices. Results cached in the `CostSnapshot` model for the month.
-- **`CostSnapshot` model** — stores per-month cost indicators; used to adjust base category weights via `cost_snapshot_to_adjustments`.
-- **Prediction API endpoint** — `GET /api/predict/?budget=&year=&month=` returns category percentages and amounts as JSON.
-- **Model info badge** on set-budget step 2 — shows which strategy was used (base, blended, or ML) and whether live cost data was fetched.
-- **Market Data Used card** on set-budget step 2 — displays CPI inflation %, petrol price, and rent cost index used in the current prediction.
-
-### Changed
-- `BudgetInputForm` and `SplitAdjustmentForm` use Bootstrap 5 styled widgets.
+- **ML prediction engine** (`ml_engine.py`) — 0 months: base; 1–2 months: blend; 3+ months: Ridge regression with polynomial features, standard scaling, seasonal lag features. *(Ridge replaced by Random Forest in v0.8.0, then by CNN-GRU in v1.0.0.)*
+- **Seasonal multipliers** for months 1, 3, 4, 7, 8, 10, 11, 12.
+- **Live cost data** (`cost_data.py`) — World Bank CPI/inflation, petrol estimate, Numbeo-style indices. Cached in `CostSnapshot`.
+- **Prediction API** — `GET /api/predict/?budget=&year=&month=`.
+- **Model info badge** and **Market Data Used card** on Set Budget Step 2.
 
 ---
 
 ## [0.1.0] — 2026-05-24
 
 ### Added
-- Initial Django project (`budgeting_tool`) with `budget` app.
-- **Models**: `MonthlyBudget` (year, month, total\_budget, notes, is\_dummy), `BudgetSplit` (category, amount, percentage, icon).
-- **11 spending categories**: Groceries, Transport, Food & Dining, Healthcare, Home, Entertainment, Subscriptions, Shopping, Travel, Investment, Other.
-- **Set Budget flow** (two steps):
-  1. Enter total monthly budget and optional notes.
-  2. Review AI-suggested percentage splits, adjust sliders, confirm and save.
-- **Live Preview donut** on set-budget step 2 with real-time percentage and amount labels.
-- **Dashboard** with category splits (coloured progress bars), allocation donut chart, monthly budget trend bar chart, and a recent months table.
-- **History page** with a total-budget trend line chart, stacked category allocation chart (%), and full monthly detail table with edit and delete actions.
-- **Dark theme** — GitHub-inspired palette (`#0d1117` background, `#00c896` emerald primary, `#f0b429` gold accent).
-- **`indian_number` template filter** skeleton; `get_item` and `get_field` filters for form rendering.
-- Django management command `load_dummy_data` for seeding test records.
+- Initial Django project with `budget` app.
+- **Models**: `MonthlyBudget`, `BudgetSplit`.
+- **11 spending categories**: Groceries, Transport, Food, Healthcare, Home, Entertainment, Subscriptions, Shopping, Travel, Investment, Other.
+- **Set Budget two-step flow** with live preview donut.
+- **Dashboard** — category splits, allocation donut, trend chart, recent months table.
+- **History page** — trend line, stacked chart, detail table.
+- **Dark theme** — `#0d1117` background, `#00c896` emerald, `#f0b429` gold.
+- `indian_number`, `get_item`, `get_field` template filters.

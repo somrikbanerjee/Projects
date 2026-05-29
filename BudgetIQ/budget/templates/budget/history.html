@@ -9,7 +9,7 @@
     <h4 class="mb-0 fw-bold">
       <i class="bi bi-clock-history text-fin me-2"></i>Budget History
     </h4>
-    <div class="text-muted" style="font-size:.82rem;">All recorded months &bull; Hyderabad</div>
+    <div class="text-muted" style="font-size:.82rem;">All recorded months &bull; budget vs actual spending</div>
   </div>
   <div class="col-auto">
     <a href="{% url 'set_budget' %}" class="btn btn-gold btn-sm">
@@ -18,38 +18,53 @@
   </div>
 </div>
 
-{% if budgets %}
-<!-- ── Total trend ───────────────────────────────────────────── -->
+{% if history_rows %}
+<!-- ── Total trend (budget + actual) ─────────────────────────────────────── -->
 <div class="card mb-4">
   <div class="card-header d-flex align-items-center gap-2">
-    <i class="bi bi-graph-up text-fin"></i> Total Budget Over Time
+    <i class="bi bi-graph-up text-fin"></i> Total Budget vs Actual Spending
   </div>
-  <div class="card-body" style="height:200px;">
+  <div class="card-body" style="height:220px;">
     <canvas id="totalTrend"></canvas>
   </div>
 </div>
 
-<!-- ── Category stacked chart ───────────────────────────────── -->
+<!-- ── Category stacked chart — toggle Budget / Actual ───────────────────── -->
 <div class="card mb-4">
   <div class="card-header d-flex align-items-center gap-2">
     <i class="bi bi-bar-chart-stacked text-fin"></i> Category Allocation Trend (%)
+    <div class="ms-auto d-flex gap-1">
+      <button id="btnBudget" onclick="showStack('budget')"
+              class="btn btn-sm" style="background:rgba(0,200,150,.18);color:#00c896;border:1px solid rgba(0,200,150,.4);font-size:.75rem;">
+        Budget
+      </button>
+      <button id="btnActual" onclick="showStack('actual')"
+              class="btn btn-sm" style="background:rgba(240,180,41,.1);color:#adbac7;border:1px solid rgba(240,180,41,.2);font-size:.75rem;">
+        Actual
+      </button>
+    </div>
   </div>
   <div class="card-body" style="height:260px;">
     <canvas id="stackedChart"></canvas>
   </div>
 </div>
 
-<!-- ── Detail table ──────────────────────────────────────────── -->
+<!-- ── Detail table ───────────────────────────────────────────────────────── -->
 <div class="card">
   <div class="card-header d-flex align-items-center gap-2">
     <i class="bi bi-table text-fin"></i> Monthly Detail
+    <span class="ms-auto" style="font-size:.75rem;color:var(--fin-muted);">
+      <span class="me-3"><span style="display:inline-block;width:10px;height:10px;background:rgba(0,200,150,.3);border:1px solid #00c896;border-radius:2px;margin-right:4px;"></span>Budget</span>
+      <span><span style="display:inline-block;width:10px;height:10px;background:rgba(240,180,41,.2);border:1px solid #f0b429;border-radius:2px;margin-right:4px;"></span>Actual</span>
+    </span>
   </div>
   <div class="card-body p-0">
     <div class="table-responsive">
-      <table class="table table-hover table-striped mb-0 align-middle" style="font-size:.82rem;">
+      <table class="table table-hover mb-0 align-middle" style="font-size:.79rem;">
         <thead>
           <tr>
-            <th>Month</th>
+            <th style="min-width:80px;">Month</th>
+            <th>Row</th>
             <th>Total (₹)</th>
             {% for cat_key, cat_label in categories %}
             <th>{{ cat_label }}</th>
@@ -58,32 +73,79 @@
           </tr>
         </thead>
         <tbody>
-          {% for mb in budgets %}
+          {% for row in history_rows %}
+          {% with mb=row.budget ma=row.actual %}
+
+          {# ── Budget row (only if a budget was set for this month) ── #}
+          {% if mb %}
           <tr>
-            <td class="fw-semibold">{{ mb.month_year_label }}</td>
+            <td class="fw-semibold" rowspan="{% if ma %}2{% else %}1{% endif %}" style="vertical-align:middle;">
+              {{ mb.month_year_label }}
+            </td>
+            <td>
+              <span class="badge" style="background:rgba(0,200,150,.15);color:#00c896;font-weight:600;">Budget</span>
+            </td>
             <td class="text-fin fw-bold">₹{{ mb.total_budget|indian_number }}</td>
             {% for cat_key, _ in categories %}
               {% for s in mb.splits.all %}{% if s.category == cat_key %}
               <td>
                 <div>₹{{ s.amount|indian_number }}</div>
-                <div style="font-size:.72rem;color:var(--fin-gold);">{{ s.percentage|floatformat:1 }}%</div>
+                <div style="font-size:.7rem;color:var(--fin-gold);">{{ s.percentage|floatformat:1 }}%</div>
               </td>
               {% endif %}{% endfor %}
             {% endfor %}
-            <td>
+            <td rowspan="{% if ma %}2{% else %}1{% endif %}" style="vertical-align:middle;">
               <div class="d-flex gap-1">
                 <a href="{% url 'set_budget_month' mb.year mb.month %}" class="btn btn-sm btn-fin-outline" title="Edit">
                   <i class="bi bi-pencil"></i>
                 </a>
-                <form method="post" action="{% url 'delete_budget' mb.year mb.month %}" onsubmit="return confirm('Delete {{ mb.month_year_label }}?')">
+                <form method="post" action="{% url 'delete_budget' mb.year mb.month %}"
+                      onsubmit="return confirm('Delete {{ mb.month_year_label }}?')">
                   {% csrf_token %}
-                  <button type="submit" class="btn btn-sm" style="background:rgba(248,81,73,.1);border:1px solid rgba(248,81,73,.25);color:#f85149;" title="Delete">
+                  <button type="submit" class="btn btn-sm"
+                          style="background:rgba(248,81,73,.1);border:1px solid rgba(248,81,73,.25);color:#f85149;" title="Delete">
                     <i class="bi bi-trash"></i>
                   </button>
                 </form>
               </div>
             </td>
           </tr>
+          {% endif %}
+
+          {# ── Actual row (shown for both paired months and actuals-only months) ── #}
+          {% if ma %}
+          <tr style="background:rgba(240,180,41,.04);">
+            {% if not mb %}
+            <td class="fw-semibold" style="vertical-align:middle;">
+              {{ ma.month_year_label }}
+            </td>
+            {% endif %}
+            <td>
+              <span class="badge" style="background:rgba(240,180,41,.18);color:#f0b429;font-weight:600;">Actual</span>
+              <div style="font-size:.65rem;color:var(--fin-muted);" title="{{ ma.source_file }}">
+                <i class="bi bi-database me-1"></i>{{ ma.source_file|truncatechars:22 }}
+              </div>
+            </td>
+            <td style="color:var(--fin-gold);font-weight:600;">₹{{ ma.total_actual|indian_number }}</td>
+            {% for cat_key, _ in categories %}
+              {% for s in ma.actual_splits.all %}{% if s.category == cat_key %}
+              <td style="color:var(--fin-gold);">
+                <div>₹{{ s.amount|indian_number }}</div>
+                <div style="font-size:.7rem;color:var(--fin-muted);">{{ s.percentage|floatformat:1 }}%</div>
+              </td>
+              {% endif %}{% endfor %}
+            {% endfor %}
+            {% if not mb %}
+            <td>
+              <a href="{% url 'set_budget_month' ma.year ma.month %}" class="btn btn-sm btn-fin-outline" title="Set budget for this month">
+                <i class="bi bi-plus"></i>
+              </a>
+            </td>
+            {% endif %}
+          </tr>
+          {% endif %}
+
+          {% endwith %}
           {% endfor %}
         </tbody>
       </table>
@@ -103,31 +165,47 @@
 {% endblock %}
 
 {% block extra_js %}
-{% if budgets %}
+{% if history_rows %}
 <script>
-const LABELS = {{ chart_labels }};
+const LABELS       = {{ chart_labels }};
 const TOTAL_SERIES = {{ total_series }};
-const CAT_SERIES = {{ category_series }};
+const ACTUAL_TOTALS = {{ actual_totals }};
+const CAT_SERIES   = {{ category_series }};
+const ACT_SERIES   = {{ actual_series }};
 const COLORS = [
   '#00c896','#f0b429','#58a6ff','#bc8cff','#3fb950',
-  '#ff7b72','#f778ba','#79c0ff','#a5d6ff','#ffa657','#adbac7'
+  '#ff7b72','#f778ba','#79c0ff','#a5d6ff','#ffa657','#adbac7','#636e72'
 ];
 const CAT_NAMES = Object.keys(CAT_SERIES);
 
+// ── Total trend ───────────────────────────────────────────────────────────
 new Chart(document.getElementById('totalTrend'), {
-  type: 'line',
+  type: 'bar',
   data: {
     labels: LABELS,
-    datasets: [{
-      label: 'Total Budget',
-      data: TOTAL_SERIES,
-      borderColor: '#00c896', backgroundColor: 'rgba(0,200,150,.12)',
-      fill: true, tension: .35, pointBackgroundColor: '#00c896', pointRadius: 4,
-    }]
+    datasets: [
+      {
+        label: 'Budget',
+        data: TOTAL_SERIES,
+        backgroundColor: 'rgba(0,200,150,.35)',
+        borderColor: '#00c896', borderWidth: 2, borderRadius: 5,
+        order: 2,
+      },
+      {
+        label: 'Actual',
+        data: ACTUAL_TOTALS.map(v => v === 'null' ? null : v),
+        backgroundColor: 'rgba(240,180,41,.45)',
+        borderColor: '#f0b429', borderWidth: 2, borderRadius: 5,
+        order: 1,
+      },
+    ]
   },
   options: {
     responsive: true, maintainAspectRatio: false,
-    plugins: { legend: { display: false } },
+    plugins: {
+      legend: { labels: { color: '#adbac7', font: { size: 11 } } },
+      tooltip: { callbacks: { label: ctx => ` ₹${(ctx.parsed.y||0).toLocaleString('en-IN', {minimumFractionDigits:2})}` } }
+    },
     scales: {
       x: { ticks: { color: '#adbac7' }, grid: { color: '#21262d' } },
       y: { ticks: { color: '#adbac7', callback: v => '₹' + (v/1000).toFixed(0) + 'k' },
@@ -136,29 +214,45 @@ new Chart(document.getElementById('totalTrend'), {
   }
 });
 
-new Chart(document.getElementById('stackedChart'), {
+// ── Stacked allocation chart ──────────────────────────────────────────────
+let stackChart;
+
+function buildStackDatasets(mode) {
+  return CAT_NAMES.map((name, i) => ({
+    label: name,
+    data: mode === 'budget'
+      ? CAT_SERIES[name]
+      : ACT_SERIES[name].map(v => v === null ? 0 : v),
+    backgroundColor: COLORS[i % COLORS.length],
+    stack: 'stack',
+  }));
+}
+
+function showStack(mode) {
+  const isBudget = mode === 'budget';
+  document.getElementById('btnBudget').style.color    = isBudget ? '#00c896' : '#adbac7';
+  document.getElementById('btnBudget').style.background = isBudget ? 'rgba(0,200,150,.18)' : 'transparent';
+  document.getElementById('btnActual').style.color    = !isBudget ? '#f0b429' : '#adbac7';
+  document.getElementById('btnActual').style.background = !isBudget ? 'rgba(240,180,41,.18)' : 'transparent';
+  stackChart.data.datasets = buildStackDatasets(mode);
+  stackChart.update();
+}
+
+stackChart = new Chart(document.getElementById('stackedChart'), {
   type: 'bar',
-  data: {
-    labels: LABELS,
-    datasets: CAT_NAMES.map((name, i) => ({
-      label: name,
-      data: CAT_SERIES[name],
-      backgroundColor: COLORS[i % COLORS.length],
-      stack: 'stack',
-    }))
-  },
+  data: { labels: LABELS, datasets: buildStackDatasets('budget') },
   options: {
     responsive: true, maintainAspectRatio: false,
     plugins: {
       legend: {
-        display: true,
-        position: 'bottom',
+        display: true, position: 'bottom',
         labels: { color: '#adbac7', font: { size: 10 }, boxWidth: 12, padding: 10 }
       }
     },
     scales: {
       x: { stacked: true, ticks: { color: '#adbac7' }, grid: { color: '#21262d' } },
-      y: { stacked: true, max: 100, ticks: { color: '#adbac7', callback: v => v + '%' },
+      y: { stacked: true, max: 100,
+           ticks: { color: '#adbac7', callback: v => v + '%' },
            grid: { color: '#21262d' } }
     }
   }

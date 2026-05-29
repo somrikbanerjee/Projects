@@ -18,7 +18,7 @@
     </a>
     {% if current_budget %}
     <form method="post" action="{% url 'delete_budget' year month %}"
-          onsubmit="return confirm('Delete the budget for {{ month_name }} {{ year }}? This cannot be undone.');">
+          onsubmit="return confirm('Delete the budget for {{ month_name }} {{ year }}?');">
       {% csrf_token %}
       <input type="hidden" name="next" value="dashboard">
       <button type="submit" class="btn"
@@ -31,7 +31,7 @@
 </div>
 
 {% if current_budget %}
-<!-- ── Stat row ───────────────────────────────────────────────── -->
+<!-- ── Stat row ─────────────────────────────────────────────────────────── -->
 <div class="row g-3 mb-4">
   <div class="col-sm-4">
     <div class="stat-pill">
@@ -59,7 +59,7 @@
   </div>
 </div>
 
-<!-- ── Split breakdown ───────────────────────────────────────── -->
+<!-- ── Split breakdown ──────────────────────────────────────────────────── -->
 <div class="row g-3 mb-4">
   <div class="col-lg-7">
     <div class="card h-100">
@@ -91,7 +91,7 @@
 
   <div class="col-lg-5 d-flex flex-column" style="gap:.75rem;">
 
-    <!-- ── Living Budget ──────────────────────────────────── -->
+    <!-- ── Living Budget ─────────────────────────────────────────────── -->
     <div class="card" style="flex:0 0 auto;">
       <div class="card-header d-flex align-items-center gap-2">
         <i class="bi bi-wallet2 text-gold"></i> Living Budget
@@ -113,7 +113,7 @@
       </div>
     </div>
 
-    <!-- ── Allocation donut ───────────────────────────────── -->
+    <!-- ── Allocation donut ──────────────────────────────────────────── -->
     <div class="card d-flex flex-column" style="flex:1 1 0;min-height:0;">
       <div class="card-header d-flex align-items-center gap-2">
         <i class="bi bi-pie-chart text-fin"></i> Allocation
@@ -123,7 +123,7 @@
       </div>
     </div>
 
-    <!-- ── Live Cost Data ─────────────────────────────────── -->
+    <!-- ── Live Cost Data ────────────────────────────────────────────── -->
     {% if cost_snapshot %}
     <div class="card" style="flex:0 0 auto;">
       <div class="card-header d-flex align-items-center gap-2">
@@ -170,7 +170,7 @@
 </div>
 
 {% else %}
-<!-- ── No budget set ──────────────────────────────────────────── -->
+<!-- ── No budget set ─────────────────────────────────────────────────────── -->
 <div class="card text-center py-5 mb-4">
   <div class="card-body">
     <i class="bi bi-wallet2" style="font-size:3rem;color:var(--fin-gold);"></i>
@@ -183,21 +183,54 @@
 </div>
 {% endif %}
 
-<!-- ── MoM comparison chart ───────────────────────────────────── -->
+<!-- ── Prev-month actual reference (shown even without current budget) ──── -->
+{% if prev_actual_ref %}
+<div class="card mb-4">
+  <div class="card-header d-flex align-items-center gap-2">
+    <i class="bi bi-receipt text-gold"></i>
+    {{ prev_actual_ref.label }} — Actual Spending
+    <span class="ms-auto fw-semibold text-gold" style="font-size:.85rem;">₹{{ prev_actual_ref.total|indian_number }}</span>
+  </div>
+  <div class="card-body p-3">
+    {% for cat_key, cat_label in categories %}
+      {% with s=prev_actual_ref.splits|get_item:cat_key %}
+      {% if s and s.amount > 0 %}
+      <div class="cat-badge mb-2">
+        <span class="icon">{{ category_icons|get_item:cat_key }}</span>
+        <span class="cat-name">{{ cat_label }}</span>
+        <div class="flex-fill px-2">
+          <div class="progress">
+            <div class="progress-bar" role="progressbar"
+                 style="width:{{ s.percentage }}%;background:rgba(240,180,41,.6);"></div>
+          </div>
+        </div>
+        <span class="cat-pct" style="color:var(--fin-gold);">{{ s.percentage|floatformat:1 }}%</span>
+        <span class="cat-amt" style="color:var(--fin-gold);">₹{{ s.amount|indian_number }}</span>
+      </div>
+      {% endif %}
+      {% endwith %}
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+<!-- ── MoM comparison chart ─────────────────────────────────────────────── -->
 {% if mom_data %}
 <div class="card mb-4">
   <div class="card-header d-flex align-items-center gap-2">
     <i class="bi bi-bar-chart-steps text-fin"></i> Month-over-Month Comparison
-    <span class="ms-auto text-muted" style="font-size:.78rem;">{{ mom_data.curr_label }} vs {{ mom_data.prev_label }}</span>
+    <span class="ms-auto text-muted" style="font-size:.78rem;">
+      {{ mom_data.curr_label }} budget vs {{ mom_data.prev_label }} budget{% if mom_data.prev_actual %} &amp; actual{% endif %}
+    </span>
   </div>
-  <div class="card-body" style="height:280px;">
+  <div class="card-body" style="height:300px;">
     <canvas id="momChart"></canvas>
   </div>
 </div>
 {% endif %}
 
-<!-- ── Trend chart ────────────────────────────────────────────── -->
-{% if recent_budgets %}
+<!-- ── Trend chart ───────────────────────────────────────────────────────── -->
+{% if recent_rows %}
 <div class="card mb-4">
   <div class="card-header d-flex align-items-center gap-2">
     <i class="bi bi-graph-up text-fin"></i> Monthly Budget Trend
@@ -208,8 +241,8 @@
 </div>
 {% endif %}
 
-<!-- ── Recent months quick view ─────────────────────────────── -->
-{% if recent_budgets %}
+<!-- ── Recent months quick view ─────────────────────────────────────────── -->
+{% if recent_rows %}
 <div class="card">
   <div class="card-header d-flex align-items-center gap-2">
     <i class="bi bi-calendar3 text-fin"></i> Recent Months
@@ -217,32 +250,74 @@
   </div>
   <div class="card-body p-0">
     <div class="table-responsive">
-      <table class="table table-hover table-striped mb-0 align-middle">
+      <table class="table table-hover mb-0 align-middle" style="font-size:.8rem;">
         <thead>
           <tr>
-            <th>Month</th><th>Total</th>
-            {% for cat_key, cat_label in categories %}<th class="d-none d-lg-table-cell">{{ cat_label }}</th>{% endfor %}
+            <th style="min-width:90px;">Month</th>
+            <th>Total</th>
+            {% for cat_key, cat_label in categories %}
+            <th class="d-none d-lg-table-cell">{{ cat_label }}</th>
+            {% endfor %}
             <th></th>
           </tr>
         </thead>
         <tbody>
-          {% for mb in recent_budgets %}
+          {% for row in recent_rows %}
+          {% with mb=row.budget ma=row.actual %}
+          {% with lbl=row.month|stringformat:"s" %}
+
+          {# ── budget row (if budget exists) ── #}
+          {% if mb %}
           <tr>
-            <td class="fw-semibold">{{ mb.month_year_label }}</td>
-            <td class="text-fin fw-semibold">₹{{ mb.total_budget|indian_number }}</td>
+            <td class="fw-semibold" rowspan="{% if ma %}2{% else %}1{% endif %}" style="vertical-align:middle;">
+              {{ mb.month_year_label }}
+            </td>
+            <td>
+              <span class="badge" style="background:rgba(0,200,150,.15);color:#00c896;font-size:.72rem;font-weight:600;">Budget</span>
+              <div class="text-fin fw-semibold" style="font-size:.85rem;">₹{{ mb.total_budget|indian_number }}</div>
+            </td>
             {% for cat_key, _ in categories %}
               {% for s in mb.splits.all %}{% if s.category == cat_key %}
-              <td class="d-none d-lg-table-cell" style="font-size:.8rem;">
-                ₹{{ s.amount|indian_number }}
-              </td>
+              <td class="d-none d-lg-table-cell" style="font-size:.78rem;">₹{{ s.amount|indian_number }}</td>
               {% endif %}{% endfor %}
             {% endfor %}
-            <td>
+            <td rowspan="{% if ma %}2{% else %}1{% endif %}" style="vertical-align:middle;">
               <a href="{% url 'set_budget_month' mb.year mb.month %}" class="btn btn-sm btn-fin-outline">
                 <i class="bi bi-pencil"></i>
               </a>
             </td>
           </tr>
+          {% endif %}
+
+          {# ── actual row (always shown if available; handles actuals-only months too) ── #}
+          {% if ma %}
+          <tr style="background:rgba(240,180,41,.04);">
+            {% if not mb %}
+            {# actuals-only month: show month label in first cell #}
+            <td class="fw-semibold" style="vertical-align:middle;">
+              {{ ma.month_year_label }}
+            </td>
+            {% endif %}
+            <td>
+              <span class="badge" style="background:rgba(240,180,41,.18);color:#f0b429;font-size:.72rem;font-weight:600;">Actual</span>
+              <div style="font-size:.85rem;color:var(--fin-gold);">₹{{ ma.total_actual|indian_number }}</div>
+            </td>
+            {% for cat_key, _ in categories %}
+              {% for s in ma.actual_splits.all %}{% if s.category == cat_key %}
+              <td class="d-none d-lg-table-cell" style="font-size:.78rem;color:var(--fin-gold);">₹{{ s.amount|indian_number }}</td>
+              {% endif %}{% endfor %}
+            {% endfor %}
+            {% if not mb %}
+            <td>
+              <a href="{% url 'set_budget_month' ma.year ma.month %}" class="btn btn-sm btn-fin-outline" title="Set budget">
+                <i class="bi bi-plus"></i>
+              </a>
+            </td>
+            {% endif %}
+          </tr>
+          {% endif %}
+
+          {% endwith %}{% endwith %}
           {% endfor %}
         </tbody>
       </table>
@@ -282,57 +357,38 @@ const dashLeaderLinePlugin = {
     const ctx  = chart.ctx;
     const meta = chart.getDatasetMeta(0);
     if (!meta.data.length) return;
-
     const cx = chart.chartArea.left + chart.chartArea.width  / 2;
     const cy = chart.chartArea.top  + chart.chartArea.height / 2;
     const outerR = meta.data[0].outerRadius;
     const ds     = chart.data.datasets[0];
     const total  = ds.data.reduce((s, v) => s + (parseFloat(v) || 0), 0);
     if (!total) return;
-
     const RADIAL = 12, HORIZ = 20, DOT = 3, MIN_PCT = 5;
-
     meta.data.forEach((arc, i) => {
       const val = parseFloat(ds.data[i]) || 0;
       const pct = val / total * 100;
       if (pct < MIN_PCT) return;
-
       const mid   = (arc.startAngle + arc.endAngle) / 2;
       const color = ds.backgroundColor[i];
       const right = Math.cos(mid) >= 0;
-
       const sx = cx + Math.cos(mid) * (outerR + 2);
       const sy = cy + Math.sin(mid) * (outerR + 2);
       const ex = cx + Math.cos(mid) * (outerR + RADIAL);
       const ey = cy + Math.sin(mid) * (outerR + RADIAL);
       const dx = ex + (right ? HORIZ : -HORIZ);
       const dy = ey;
-
       ctx.save();
-      ctx.strokeStyle = color;
-      ctx.lineWidth = 1.2;
-      ctx.beginPath();
-      ctx.moveTo(sx, sy);
-      ctx.lineTo(ex, ey);
-      ctx.lineTo(dx, dy);
-      ctx.stroke();
-
+      ctx.strokeStyle = color; ctx.lineWidth = 1.2;
+      ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(ex, ey); ctx.lineTo(dx, dy); ctx.stroke();
       ctx.fillStyle = color;
-      ctx.beginPath();
-      ctx.arc(dx, dy, DOT, 0, Math.PI * 2);
-      ctx.fill();
-
+      ctx.beginPath(); ctx.arc(dx, dy, DOT, 0, Math.PI * 2); ctx.fill();
       const amtStr  = PIE_AMOUNTS[i].toLocaleString('en-IN', {minimumFractionDigits:2, maximumFractionDigits:2});
       const labelTxt = `${chart.data.labels[i]}  ₹${amtStr}`;
       ctx.font = '600 9px Inter, system-ui, sans-serif';
-      ctx.fillStyle = '#dde3ea';
-      ctx.textBaseline = 'middle';
+      ctx.fillStyle = '#dde3ea'; ctx.textBaseline = 'middle';
       let tx = dx + (right ? DOT + 3 : -(DOT + 3));
       let ty = dy;
-      if (!right) {
-        const w = ctx.measureText(labelTxt).width;
-        if (tx - w < 6) { tx = w + 6; ty = dy - 10; }
-      }
+      if (!right) { const w = ctx.measureText(labelTxt).width; if (tx - w < 6) { tx = w + 6; ty = dy - 10; } }
       ctx.textAlign = right ? 'left' : 'right';
       ctx.fillText(labelTxt, tx, ty);
       ctx.restore();
@@ -347,17 +403,11 @@ new Chart(document.getElementById('pieChart'), {
     datasets: [{ data: PIE_DATA, backgroundColor: COLORS, borderWidth: 2, borderColor: '#161b22', hoverOffset: 6 }]
   },
   options: {
-    responsive: true,
-    maintainAspectRatio: false,
-    cutout: '60%',
+    responsive: true, maintainAspectRatio: false, cutout: '60%',
     layout: { padding: 50 },
     plugins: {
       legend: { display: false },
-      tooltip: {
-        callbacks: {
-          label: (ctx) => ` ${ctx.label}: ₹${PIE_AMOUNTS[ctx.dataIndex].toLocaleString('en-IN', {minimumFractionDigits:2,maximumFractionDigits:2})} (${ctx.parsed.toFixed(1)}%)`
-        }
-      }
+      tooltip: { callbacks: { label: (ctx) => ` ${ctx.label}: ₹${PIE_AMOUNTS[ctx.dataIndex].toLocaleString('en-IN', {minimumFractionDigits:2,maximumFractionDigits:2})} (${ctx.parsed.toFixed(1)}%)` } }
     },
   },
   plugins: [dashLeaderLinePlugin],
@@ -367,25 +417,33 @@ new Chart(document.getElementById('pieChart'), {
 
 {% if mom_data %}
 <script>
+const MOM_DATASETS = [
+  {
+    label: '{{ mom_data.curr_label }} Budget',
+    data: {{ mom_data.curr }},
+    backgroundColor: 'rgba(0,200,150,.75)',
+    borderColor: '#00c896', borderWidth: 1, borderRadius: 4,
+  },
+  {
+    label: '{{ mom_data.prev_label }} Budget',
+    data: {{ mom_data.prev }},
+    backgroundColor: 'rgba(240,180,41,.45)',
+    borderColor: '#f0b429', borderWidth: 1, borderRadius: 4,
+  },
+  {% if mom_data.prev_actual %}
+  {
+    label: '{{ mom_data.prev_actual_label }}',
+    data: {{ mom_data.prev_actual }},
+    backgroundColor: 'rgba(240,180,41,.15)',
+    borderColor: '#f0b429', borderWidth: 2, borderRadius: 4,
+    borderDash: [4,3],
+    type: 'bar',
+  },
+  {% endif %}
+];
 new Chart(document.getElementById('momChart'), {
   type: 'bar',
-  data: {
-    labels: {{ mom_data.labels }},
-    datasets: [
-      {
-        label: '{{ mom_data.curr_label }}',
-        data: {{ mom_data.curr }},
-        backgroundColor: 'rgba(0,200,150,.75)',
-        borderColor: '#00c896', borderWidth: 1, borderRadius: 4,
-      },
-      {
-        label: '{{ mom_data.prev_label }}',
-        data: {{ mom_data.prev }},
-        backgroundColor: 'rgba(240,180,41,.55)',
-        borderColor: '#f0b429', borderWidth: 1, borderRadius: 4,
-      },
-    ]
-  },
+  data: { labels: {{ mom_data.labels }}, datasets: MOM_DATASETS },
   options: {
     responsive: true, maintainAspectRatio: false,
     plugins: {
@@ -411,9 +469,7 @@ new Chart(document.getElementById('trendChart'), {
       label: 'Total Budget (₹)',
       data: {{ chart_totals }},
       backgroundColor: 'rgba(0,200,150,.25)',
-      borderColor: '#00c896',
-      borderWidth: 2,
-      borderRadius: 6,
+      borderColor: '#00c896', borderWidth: 2, borderRadius: 6,
     }]
   },
   options: {
@@ -421,8 +477,7 @@ new Chart(document.getElementById('trendChart'), {
     plugins: { legend: { display: false } },
     scales: {
       x: { ticks: { color: '#adbac7' }, grid: { color: '#21262d' } },
-      y: { ticks: { color: '#adbac7', callback: v => '₹' + (v/1000).toFixed(0) + 'k' },
-           grid: { color: '#21262d' } }
+      y: { ticks: { color: '#adbac7', callback: v => '₹' + (v/1000).toFixed(0) + 'k' }, grid: { color: '#21262d' } }
     }
   }
 });

@@ -133,6 +133,37 @@
   </div>
 </div>
 
+{% if prev_actual_splits %}
+<!-- ── Previous month actuals reference ─────────────────────────── -->
+<div class="card mb-3" style="border-color:rgba(240,180,41,.25);">
+  <div class="card-header d-flex align-items-center gap-2" style="background:rgba(240,180,41,.06);">
+    <i class="bi bi-receipt text-gold"></i>
+    <span style="color:var(--fin-gold);font-weight:600;">{{ prev_month_label }} — Actual Spending</span>
+    <span class="ms-auto" style="font-size:.8rem;color:var(--fin-muted);">
+      ₹{{ prev_actual.total_actual|indian_number }} total &bull; used to train the model
+    </span>
+  </div>
+  <div class="card-body p-3">
+    <div class="row g-2" style="font-size:.8rem;">
+      {% for cat_key, cat_label in categories %}
+      {% if prev_actual_splits|get_item:cat_key %}
+      {% with ps=prev_actual_splits|get_item:cat_key %}
+      <div class="col-6 col-md-4 col-lg-3">
+        <div class="d-flex align-items-center gap-2" style="padding:.3rem .5rem;border-radius:6px;background:rgba(240,180,41,.06);">
+          <span>{{ category_icons|get_item:cat_key }}</span>
+          <span style="flex:1;color:var(--fin-text-soft);">{{ cat_label }}</span>
+          <span style="color:var(--fin-gold);font-weight:600;">₹{{ ps.amount|indian_number }}</span>
+          <span style="color:var(--fin-muted);font-size:.72rem;">{{ ps.pct|floatformat:1 }}%</span>
+        </div>
+      </div>
+      {% endwith %}
+      {% endif %}
+      {% endfor %}
+    </div>
+  </div>
+</div>
+{% endif %}
+
 <form method="post" id="splitForm">
   {% csrf_token %}
   {{ adj_form.year }}{{ adj_form.month }}{{ adj_form.total_budget }}{{ adj_form.notes }}
