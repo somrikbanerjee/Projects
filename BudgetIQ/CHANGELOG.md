@@ -9,6 +9,26 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [1.0.1] — 2026-05-29
+
+### Fixed
+
+- **Home always below rent (₹38,500)** — the previous architecture applied a rent floor inside `predict_split` on intermediate floating-point amounts, then converted back to percentages. By the time `pct_to_amounts` reconstructed rupee figures from those rounded percentages, up to ₹4.50 of precision had been lost, producing a home amount like ₹38,495.50. Replaced the fragile floor with a structural fix: rent is now deducted as a fixed amount before the ML split (alongside EMI and investment). `_ml_to_total_pcts` bakes rent into home's total-budget percentage; `pct_to_amounts` distributes `total − investment − EMI` proportionally, and home's final amount naturally comes out to rent + ML share — always above rent with no separate floor logic. `_apply_rent_floor` removed entirely.
+
+- **Set Budget "Adjust Splits" header showed "100.0%" instead of total amount** — the card header now shows the live total in Indian rupee format (e.g. ₹1,14,060.73) rather than a percentage. The total updates in real time as the user drags sliders.
+
+- **Displayed category amounts summed to ₹6.41 more than the budget** — the old JavaScript `resolveAmt` computed non-fixed amounts as `pct / 100 × TOTAL_BUDGET`. Because EMI and investment are exact fixed values, this effectively inflated the pool by their share. Fixed by computing non-fixed amounts as a proportional share of `ML_REM = TOTAL_BUDGET − EMI − investment`, matching the Python `pct_to_amounts` logic. Gap dropped from ₹6.41 to ₹0.00.
+
+- **Residual ₹0.01 discrepancy between displayed amounts and budget** — even with the corrected formula, rounding 12 independent amounts to 2 decimal places and summing them can be off by ₹0.01 because `Σ round(xᵢ, 2) ≠ round(Σ xᵢ, 2)`. Fixed by switching to integer-paise arithmetic (×100) in `refreshTotals`: amounts for 11 categories are computed and rounded to the nearest paisa, then "Other" receives `ML_REM_PAISE − running_paise` as the exact integer residual. Total is always `TB_PAISE / 100 = TOTAL_BUDGET` exactly — guaranteed. Identical to the Python `ml_cats[-1] = ml_rem − running` pattern.
+
+### Changed
+
+- `predict_split` ML-pool is now `total − investment − EMI − rent` (was `total − investment − EMI`). `_ml_to_total_pcts` and `_total_to_ml_pcts` updated with a `rent` parameter. For historical records, home's discretionary-above-rent portion (`max(home_actual − rent, 0)`) is used as the ML training signal so the model learns discretionary home behaviour independently of the fixed rent component.
+- Set Budget Step 2 fixed-expense formula bar updated from "Budget − Investment − EMI = Spendable" to "Budget − Investment − EMI − Rent = ML Pool" with a note that home receives rent + its ML share.
+- `cat-amt` CSS widened from `width: 90px` to `min-width: 110px; white-space: nowrap` to prevent large Indian-formatted amounts (e.g. ₹2,04,426.13) from wrapping to a second line.
+
+---
+
 ## [1.0.0] — 2026-05-29
 
 ### Added

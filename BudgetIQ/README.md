@@ -17,9 +17,9 @@ Supports 16 cities out of the box: Ahmedabad, Bangalore, Chandigarh, Chennai, Co
 - **Live cost data** — India CPI inflation and petrol prices fetched from the World Bank API on every prediction; per-city Numbeo-style rent, groceries, and restaurant indices applied as category multipliers
 
 ### Fixed-expense handling
-- **Investment** — fixed at ₹50,000/month when budget ≥ ₹70,000; escalates 10% each April from FY 2026–27. Skipped automatically if it would leave less than rent after EMI
+- **Investment** — fixed at ₹50,000/month when budget ≥ ₹70,000; escalates 10% each April from FY 2026–27. Skipped automatically if paying it would leave less than zero after EMI and rent
 - **Loan EMI** — fixed amount (₹28,168 default) deducted until a configurable end date, then zeroed automatically
-- **Rent floor** — home allocation is always ≥ your configured rent amount; any shortfall is redistributed proportionally from other categories
+- **Rent (home guarantee)** — rent is deducted as a fixed amount before the ML split. Home's final allocation = rent + home's proportional share of the ML pool, so home is always greater than rent with no fragile floor logic. ML pool = total − investment − EMI − rent; this remainder is split across all 10 ML categories including home
 
 ### Dashboard
 - Stat pills: total budget, investment, rent
@@ -40,8 +40,10 @@ Supports 16 cities out of the box: Ahmedabad, Bangalore, Chandigarh, Chennai, Co
 ### Set Budget — Step 2 (AI suggestion screen)
 - Previous month's actual spending shown as a reference panel (category-by-category amounts and percentages) so you can compare while adjusting splits
 - Model info badge: base / blend / CNN-GRU, months of history, months confirmed by actuals
-- Fixed-expense breakdown: Budget − Investment − EMI = Spendable; rent floor shown
+- Fixed-expense breakdown: Budget − Investment − EMI − Rent = ML Pool, with a note that home receives rent + its ML share
 - Live preview donut with leader-line labels; real-time percentage and amount updates
+- **Header shows total rupee amount** (₹X,XX,XXX.XX) that updates live as sliders are adjusted
+- Category amounts computed using integer-paise arithmetic — the "Other" category absorbs rounding residual so the displayed amounts always sum to exactly the total budget
 
 ### Other
 - **Multi-city support** — 16 Indian cities; all baselines calibrated per city. Change city in Settings at any time
@@ -174,7 +176,7 @@ The server runs with `--noreload` to prevent Django's file-watcher from polling 
 
 For months where actual spending has been imported, the **actual** category percentages are used as training labels instead of the budgeted percentages. This means the model learns from real behaviour, not intentions.
 
-Investment and loan EMI are **fixed amounts** (not predicted); they are deducted before any split is computed. The home category has a **rent floor**.
+Investment and EMI are **fixed amounts** deducted before the ML split. Rent is also deducted as a fixed amount; home then receives rent plus its proportional share of the remaining ML pool — always above rent, with no fragile floor arithmetic.
 
 ### Money Manager category mapping
 

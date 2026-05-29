@@ -27,10 +27,13 @@ Fixed-expense deduction order
 ────────────────────────────
 1. Investment  : ₹50,000 if budget ≥ ₹70,000 (escalates 10 % each April)
 2. Loan EMI    : ₹28,168/month until Sep 2028 (configurable in AppSettings)
-3. Home floor  : home allocation ≥ rent_amount (₹38,500 by default)
+3. Rent        : deducted as a fixed amount; home is guaranteed to receive
+                 at least rent_amount.
 
-The remainder after (1)+(2) is the ML-spendable pool, split among the
-10 remaining categories by the CNN-GRU model.
+The ML-spendable pool = total − investment − EMI − rent.
+This pool is split among all 10 ML categories (including home) so that
+home's final allocation = rent + home's ML share (always ≥ rent, with no
+fragile floating-point floor logic).
 
 Model schedule
 ──────────────
@@ -178,44 +181,51 @@ def _base_ml_alloc(investment_applies: bool, month: int,
 
 # ── Convert between ML-spendable % and total-budget % ───────────────────────
 
-def _ml_to_total_pcts(ml_pcts: dict, inv: float, emi: float,
+def _ml_to_total_pcts(ml_pcts: dict, inv: float, emi: float, rent: float,
                       total_budget: float) -> dict:
-    inv_pct = inv / total_budget * 100.0
-    emi_pct = emi / total_budget * 100.0
-    ml_pct  = 100.0 - inv_pct - emi_pct
-    result  = {cat: pct * ml_pct / 100.0 for cat, pct in ml_pcts.items()}
+    """
+    Convert ML-pool percentages → total-budget percentages.
+
+    Investment and EMI are fixed; home gets rent + its ML-pool share.
+    All percentages sum to 100.
+    """
+    inv_pct  = inv  / total_budget * 100.0
+    emi_pct  = emi  / total_budget * 100.0
+    ml_spendable = total_budget - inv - emi - rent
+    ml_factor = ml_spendable / total_budget * 100.0   # fraction of total going to ML pool
+
+    result = {}
+    for cat, pct in ml_pcts.items():
+        ml_amount = pct / 100.0 * ml_spendable
+        if cat == 'home':
+            result[cat] = (rent + ml_amount) / total_budget * 100.0
+        else:
+            result[cat] = ml_amount / total_budget * 100.0
     result['investment'] = inv_pct
     result['emi']        = emi_pct
     return result
 
 
-def _total_to_ml_pcts(total_pcts: dict, inv: float, emi: float,
+def _total_to_ml_pcts(total_pcts: dict, inv: float, emi: float, rent: float,
                       total_budget: float) -> dict:
-    ml_spendable = total_budget - inv - emi
+    """
+    Convert total-budget percentage splits → ML-pool percentages for training.
+
+    ML-pool = total − investment − EMI − rent.
+    For 'home', only the discretionary portion above rent is ML-learned
+    (the rent itself is always guaranteed separately).
+    """
+    ml_spendable = total_budget - inv - emi - rent
     if ml_spendable <= 0:
         eq = 100.0 / len(ML_CATEGORIES)
         return {cat: eq for cat in ML_CATEGORIES}
     result = {}
     for cat in ML_CATEGORIES:
         amount = total_pcts.get(cat, 0.0) / 100.0 * total_budget
+        if cat == 'home':
+            amount = max(amount - rent, 0.0)   # discretionary above rent
         result[cat] = amount / ml_spendable * 100.0
     return _normalise(result)
-
-
-# ── Home rent floor ───────────────────────────────────────────────────────────
-
-def _apply_rent_floor(ml_amounts: dict, ml_spendable: float, rent: float) -> dict:
-    result = dict(ml_amounts)
-    if result.get('home', 0) >= rent:
-        return result
-    shortfall = rent - result['home']
-    result['home'] = rent
-    other_cats = [c for c in ML_CATEGORIES if c != 'home']
-    other_total = sum(result[c] for c in other_cats)
-    if other_total >= shortfall:
-        for cat in other_cats:
-            result[cat] = max(result[cat] - shortfall * result[cat] / other_total, 0)
-    return result
 
 
 # ── 1D-CNN + GRU model ────────────────────────────────────────────────────────
@@ -465,22 +475,30 @@ def predict_split(total_budget: float, year: int, month: int,
                   history: list, cost_adj: dict = None) -> dict:
     """
     Returns {category: % of total}  summing to 100.
-    investment = fixed amount / total * 100  (or 0).
-    emi        = fixed amount / total * 100  (or 0 after end date).
+
+    Fixed deductions (not predicted by ML):
+      investment — fixed amount, or 0 when budget too small
+      emi        — fixed amount until end date, then 0
+      rent       — deducted before ML split; home's final amount = rent + ML share
+
+    ML-pool = total − investment − EMI − rent.
+    Split among all 10 ML categories (including home), so home is always
+    at least rent with no fragile floating-point floor.
     """
     inv  = _inv_amount(total_budget, year, month)
     emi  = _emi_amount(year, month)
     rent = _rent_amount()
-    ml_spendable = total_budget - inv - emi
+    ml_spendable = total_budget - inv - emi - rent   # pool split by ML
 
     inv_applies = inv > 0
     base_ml = _base_ml_alloc(inv_applies, month, cost_adj)
     n = len(history)
 
     def to_ml(rec):
-        rec_inv = _inv_amount(rec['total_budget'], rec['year'], rec['month'])
-        rec_emi = float(_get_settings().get_emi_for_month(rec['year'], rec['month']))
-        return _total_to_ml_pcts(rec['splits'], rec_inv, rec_emi, rec['total_budget'])
+        rec_inv  = _inv_amount(rec['total_budget'], rec['year'], rec['month'])
+        rec_emi  = float(_get_settings().get_emi_for_month(rec['year'], rec['month']))
+        return _total_to_ml_pcts(rec['splits'], rec_inv, rec_emi, rent,
+                                 rec['total_budget'])
 
     if n == 0:
         ml_pcts = base_ml
@@ -496,8 +514,8 @@ def predict_split(total_budget: float, year: int, month: int,
 
     else:
         # ── CNN-GRU path ──────────────────────────────────────────────────────
-        hist_ml    = [{**r, 'ml_pcts': to_ml(r)} for r in history]
-        ml_weight  = min(n / 12.0, 0.85)
+        hist_ml   = [{**r, 'ml_pcts': to_ml(r)} for r in history]
+        ml_weight = min(n / 12.0, 0.85)
 
         ml_pred = {}
         for cat in ML_CATEGORIES:
@@ -519,20 +537,22 @@ def predict_split(total_budget: float, year: int, month: int,
                    for cat in ML_CATEGORIES}
         ml_pcts = _normalise(ml_pcts)
 
-    # Apply rent floor on amounts, then convert back to %
-    if ml_spendable > 0:
-        ml_amounts = {cat: ml_pcts[cat] / 100.0 * ml_spendable for cat in ML_CATEGORIES}
-        ml_amounts = _apply_rent_floor(ml_amounts, ml_spendable, rent)
-        ml_pcts    = {cat: ml_amounts[cat] / ml_spendable * 100.0 for cat in ML_CATEGORIES}
-        ml_pcts    = _normalise(ml_pcts)
-
-    return _ml_to_total_pcts(ml_pcts, inv, emi, total_budget)
+    return _ml_to_total_pcts(ml_pcts, inv, emi, rent, total_budget)
 
 
 # ── Amounts computation ───────────────────────────────────────────────────────
 
 def pct_to_amounts(pct_dict: dict, total_budget: float,
                    year: int = None, month: int = None) -> dict:
+    """
+    Convert percentage dict → exact rupee amounts.
+
+    pct_dict comes from predict_split / _ml_to_total_pcts, where home's
+    percentage already encodes (rent + ML share) / total * 100.  We
+    therefore distribute (total − investment − EMI) proportionally across
+    all 10 ML categories; home's amount naturally comes out to
+    rent + its ML share with no separate rent arithmetic needed.
+    """
     import datetime
     if year is None or month is None:
         now = datetime.datetime.now()
@@ -553,7 +573,7 @@ def pct_to_amounts(pct_dict: dict, total_budget: float,
         amounts[cat] = amt
         running     += amt
 
-    amounts[ml_cats[-1]] = ml_rem - running
+    amounts[ml_cats[-1]] = ml_rem - running   # absorbs rounding residual
     amounts['investment'] = inv_dec
     amounts['emi']        = emi_dec
 

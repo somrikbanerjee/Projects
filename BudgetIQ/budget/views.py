@@ -230,7 +230,7 @@ def set_budget(request, year=None, month=None):
                 'investment_amount': prediction['investment'],
                 'emi_amount': prediction['emi'],
                 'rent_amount': prediction['rent'],
-                'spendable': total_budget - prediction['investment'] - prediction['emi'],
+                'spendable': total_budget - prediction['investment'] - prediction['emi'] - prediction['rent'],
                 'inv_params': prediction['inv_params'],
                 'category_icons': CATEGORY_ICONS,
                 'categories': CATEGORIES,
