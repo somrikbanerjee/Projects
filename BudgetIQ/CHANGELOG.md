@@ -9,6 +9,30 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [1.0.2] — 2026-05-30
+
+### Added
+
+- **`get_available_months(filepath, before_year, before_month)`** in `mmbak_importer.py` — queries the .mmbak SQLite file for all distinct year-month pairs that have expense transactions and fall strictly before the given cutoff date.
+
+- **`import_all_available_actuals(before_year, before_month)`** in `mmbak_importer.py` — calls `get_available_months` and upserts a `MonthlyActual` record for every month found. Each month's existing record is overwritten with the freshest data (idempotent). Replaces the single-month `import_actuals_for_month` call in the set-budget flow so the complete spending history from the backup is imported in one pass.
+
+- **`_compute_actual_avg(before_year, before_month)`** helper in `views.py` — queries all `MonthlyActual` records strictly before the cutoff, averages amounts and percentages per category across however many months are available, and returns a template-ready dict with `label`, `total` (average monthly total), `splits` (`{cat: {amount, percentage}}`), and `n_months`. Used by both the dashboard and set-budget views.
+
+### Changed
+
+- **Set Budget Step 1** now calls `import_all_available_actuals(year, month)` instead of `import_actuals_for_month(prev_year, prev_month)`. Every month available in the latest `.mmbak` before the budget month is imported and upserted before the AI recommendation is generated. This gives the CNN-GRU model the full available spending history as training data, not just the immediately preceding month.
+
+- **Dashboard actuals card** previously showed only the previous month's spending. It now shows the **average actual spending per category** across all imported months, with a dynamic label (e.g. "Mar–Apr 2026 · 2-month avg") and a `/mo` suffix on the total. When only one month exists the label shows that month name without an avg badge.
+
+- **Set Budget Step 2 reference panel** previously showed only the previous month's actuals. It now shows the same averaged data (all imported months), updated label, and `n_months` count badge when more than one month is available.
+
+- Dashboard and History **Recent Months table and charts** now automatically reflect all imported months since `import_all_available_actuals` upserts every available month — no template changes required. Each imported month appears as a gold "Actual" row (paired with a "Budget" row when a budget exists for that month).
+
+- Three separate context variables (`prev_actual`, `prev_actual_splits`, `prev_month_label`) removed from the set-budget view; replaced by the single `actual_avg_ref` dict.
+
+---
+
 ## [1.0.1] — 2026-05-29
 
 ### Fixed

@@ -151,14 +151,7 @@ def save_actuals_to_db(
 
 
 def import_actuals_for_month(year: int, month: int) -> "MonthlyActual | None":
-    """
-    Find the latest .mmbak, extract expenses for (year, month), save to DB.
-
-    Called automatically each time the user sets a budget — imports the
-    previous month's actuals before generating the AI recommendation.
-
-    Returns the saved MonthlyActual or None if no data is available.
-    """
+    """Find the latest .mmbak, extract expenses for (year, month), save to DB."""
     filepath = find_latest_mmbak()
     if not filepath:
         return None
@@ -176,3 +169,66 @@ def import_actuals_for_month(year: int, month: int) -> "MonthlyActual | None":
         year, month, os.path.basename(filepath), sum(expenses.values()),
     )
     return save_actuals_to_db(year, month, expenses, filepath)
+
+
+def get_available_months(filepath: str,
+                         before_year: int, before_month: int) -> list:
+    """
+    Return a sorted list of (year, month) tuples that have expense
+    transactions in the .mmbak file and fall strictly before
+    (before_year, before_month).
+    """
+    try:
+        conn = sqlite3.connect(filepath)
+        cur  = conn.cursor()
+        cur.execute("""
+            SELECT DISTINCT
+                CAST(strftime('%Y', datetime(ZDATE/1000, 'unixepoch', 'localtime')) AS INTEGER),
+                CAST(strftime('%m', datetime(ZDATE/1000, 'unixepoch', 'localtime')) AS INTEGER)
+            FROM INOUTCOME
+            WHERE IS_DEL = 0 AND DO_TYPE = 1
+            ORDER BY 1, 2
+        """)
+        rows = cur.fetchall()
+        conn.close()
+        return [(yr, mo) for yr, mo in rows if (yr, mo) < (before_year, before_month)]
+    except Exception as exc:
+        logger.warning("Failed to list available months in %s: %s", filepath, exc)
+        return []
+
+
+def import_all_available_actuals(before_year: int,
+                                  before_month: int) -> list:
+    """
+    Import actuals for every month available in the latest .mmbak file
+    that falls strictly before (before_year, before_month).
+
+    Each month is upserted — existing records are overwritten with the
+    freshest data.  Returns a list of MonthlyActual instances imported.
+
+    Called each time the user sets a budget so the full spending history
+    (not just the immediately preceding month) is available for ML training
+    and for display in the dashboard / history.
+    """
+    filepath = find_latest_mmbak()
+    if not filepath:
+        return []
+
+    months   = get_available_months(filepath, before_year, before_month)
+    imported = []
+    for yr, mo in months:
+        expenses = extract_monthly_expenses(filepath, yr, mo)
+        if not expenses:
+            continue
+        ma = save_actuals_to_db(yr, mo, expenses, filepath)
+        imported.append(ma)
+        logger.info(
+            "Imported actuals for %04d-%02d from %s  (total ₹%.2f)",
+            yr, mo, os.path.basename(filepath), sum(expenses.values()),
+        )
+
+    logger.info(
+        "Imported %d month(s) of actuals from %s",
+        len(imported), os.path.basename(filepath),
+    )
+    return imported

@@ -11,7 +11,7 @@ Supports 16 cities out of the box: Ahmedabad, Bangalore, Chandigarh, Chennai, Co
 ### Budget intelligence
 - **AI-suggested splits** — city base allocations for the first month, blending in your history as months accumulate, switching to a full CNN-GRU model at 3+ months
 - **1D-CNN + GRU model** — a 1D convolution layer captures short-term month-to-month patterns; a GRU processes the full sequence for long-range temporal dependencies. Trained fresh on every prediction call so it always reflects the latest data
-- **Actual-spending import** — each time you set a budget, the app finds the latest `.mmbak` file in `~/Google Drive/MoneyManager/`, opens it as a SQLite database, extracts the previous month's category expenses, and saves them as `MonthlyActual` records. These actuals become the training labels for the CNN-GRU (more accurate than intended budget splits)
+- **Actual-spending import** — each time you set a budget, the app finds the latest `.mmbak` file in `~/Google Drive/MoneyManager/`, opens it as a SQLite database, and imports **every month available** before the current budget month. All imported months are upserted as `MonthlyActual` records and immediately appear in the dashboard and history. The full multi-month spending history becomes the CNN-GRU training signal (more accurate than intended budget splits)
 - **Model schedule**: 0 months → city base; 1–2 months → blend `(1−α)·base + α·actuals` (α = n/3); 3+ months → CNN-GRU weighted up to 0.85 at 12 months
 - **Seasonal adjustments** — spending weights shift automatically for festive and travel months
 - **Live cost data** — India CPI inflation and petrol prices fetched from the World Bank API on every prediction; per-city Numbeo-style rent, groceries, and restaurant indices applied as category multipliers
@@ -25,7 +25,7 @@ Supports 16 cities out of the box: Ahmedabad, Bangalore, Chandigarh, Chennai, Co
 - Stat pills: total budget, investment, rent
 - Category splits with coloured progress bars, percentages, and amounts
 - Right column: Living Budget card (total − investment − rent − EMI), allocation donut with leader-line labels, live cost data (CPI, petrol, indices)
-- **Previous month actual spending card** — always visible on the dashboard; shows the previous month's category breakdown (imported from `.mmbak`) even before the current month's budget is set
+- **Average actual spending card** — always visible on the dashboard; shows the average spending per category across all imported months (e.g. "Mar–Apr 2026 · 2-month avg"), with progress bars and a per-month average total. Grows richer as more months of history accumulate
 - Month-over-month comparison chart: current budget vs previous budget and previous actuals side-by-side
 - Monthly budget trend chart; recent months table with paired Budget/Actual rows per month
 - Actuals-only months (imported but no budget set) appear in the Recent Months table with a `+` button to set a budget
@@ -38,7 +38,7 @@ Supports 16 cities out of the box: Ahmedabad, Bangalore, Chandigarh, Chennai, Co
 - Edit and delete actions per month
 
 ### Set Budget — Step 2 (AI suggestion screen)
-- Previous month's actual spending shown as a reference panel (category-by-category amounts and percentages) so you can compare while adjusting splits
+- Average actual spending across all available imported months shown as a reference panel (category-by-category averages with n-month badge) so you can compare real prior behaviour against the AI suggestion while adjusting splits
 - Model info badge: base / blend / CNN-GRU, months of history, months confirmed by actuals
 - Fixed-expense breakdown: Budget − Investment − EMI − Rent = ML Pool, with a note that home receives rent + its ML share
 - Live preview donut with leader-line labels; real-time percentage and amount updates
@@ -162,7 +162,7 @@ The server runs with `--noreload` to prevent Django's file-watcher from polling 
 ## Usage
 
 1. **Dashboard** — landing page shows the current month's budget split (if set), Living Budget breakdown, allocation donut, and live cost data. The previous month's actual spending is always shown as a reference card. Below: MoM comparison chart, trend chart, and a Recent Months table with Budget/Actual paired rows.
-2. **Set Budget** — enter your total monthly income. BudgetIQ automatically imports the previous month's actuals from the latest `.mmbak` backup, retrains the CNN-GRU model on all available history, and generates a suggested split. The previous month's actuals are displayed as a reference panel while you review and adjust.
+2. **Set Budget** — enter your total monthly income. BudgetIQ automatically imports **every available month** of actuals from the latest `.mmbak` backup, retrains the CNN-GRU model on the full history, and generates a suggested split. The averaged actuals across all imported months are displayed as a reference panel while you review and adjust.
 3. **History** — all recorded months in a unified table (budget + actuals side by side); months with actuals but no budget also appear. Toggle the stacked chart between budgeted and actual allocations.
 4. **Settings** — select your city, update monthly rent, loan EMI amount, and EMI end date.
 

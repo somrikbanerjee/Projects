@@ -15,7 +15,57 @@ from .models import (
 from .forms import BudgetInputForm, SplitAdjustmentForm, AppSettingsForm
 from .ml_engine import get_prediction_for_month, pct_to_amounts, CATEGORIES as CATEGORY_KEYS
 from .cost_data import get_or_fetch_cost_snapshot, resolve_city_from_coords, SUPPORTED_CITIES
-from .mmbak_importer import import_actuals_for_month
+from .mmbak_importer import import_actuals_for_month, import_all_available_actuals
+
+
+def _compute_actual_avg(before_year: int, before_month: int) -> dict | None:
+    """
+    Average actual spending per category across all MonthlyActual records
+    strictly before (before_year, before_month).
+
+    Returns a template-ready dict with keys:
+      label     — human-readable range string
+      total     — average monthly total (float)
+      splits    — {cat: {'amount': float, 'percentage': float}}
+      n_months  — number of months averaged
+    or None if no actuals exist yet.
+    """
+    from django.db.models import Q
+    qs = (MonthlyActual.objects
+          .filter(Q(year__lt=before_year) | Q(year=before_year, month__lt=before_month))
+          .prefetch_related('actual_splits')
+          .order_by('year', 'month'))
+    records = list(qs)
+    if not records:
+        return None
+
+    n           = len(records)
+    cat_totals  = {cat: 0.0 for cat in CATEGORY_KEYS}
+    total_sum   = 0.0
+
+    for ma in records:
+        total_sum += float(ma.total_actual)
+        for s in ma.actual_splits.all():
+            cat_totals[s.category] += float(s.amount)
+
+    avg_total = total_sum / n
+    splits = {}
+    for cat in CATEGORY_KEYS:
+        avg_amt = cat_totals[cat] / n
+        splits[cat] = {
+            'amount':     round(avg_amt, 2),
+            'percentage': round((avg_amt / avg_total * 100) if avg_total > 0 else 0.0, 1),
+        }
+
+    months = [f"{calendar.month_abbr[ma.month]} {ma.year}" for ma in records]
+    label  = months[0] if n == 1 else f"{months[0]}–{months[-1]}"
+
+    return {
+        'label':    label,
+        'total':    round(avg_total, 2),
+        'splits':   splits,
+        'n_months': n,
+    }
 
 
 def _now_india():
@@ -119,14 +169,8 @@ def dashboard(request):
             mom_data['prev_actual']       = json.dumps([prev_act.get(cat, 0) for cat, _ in CATEGORIES])
             mom_data['prev_actual_label'] = f"{prev_budget.month_year_label} Actual"
 
-    # Prev-actual reference panel — shown even if no current budget
-    prev_actual_ref = None
-    if prev_actual:
-        prev_actual_ref = {
-            'label':  f"{calendar.month_abbr[prev_month]} {prev_year}",
-            'total':  prev_actual.total_actual,
-            'splits': {s.category: s for s in prev_actual.actual_splits.all()},
-        }
+    # Actuals summary card — average across all available months before today
+    prev_actual_ref = _compute_actual_avg(year, month)
 
     settings = AppSettings.get()
     cost_snapshot = get_or_fetch_cost_snapshot(year, month, city=settings.location)
@@ -181,12 +225,9 @@ def set_budget(request, year=None, month=None):
         if form.is_valid():
             total_budget = float(form.cleaned_data['total_budget'])
 
-            # Always pull the latest .mmbak and import actuals for the
-            # month *before* the one being budgeted, so the model retrains
-            # on the freshest spending data before making a recommendation.
-            prev_month = month - 1 if month > 1 else 12
-            prev_year  = year if month > 1 else year - 1
-            import_actuals_for_month(prev_year, prev_month)
+            # Import ALL available months from the latest .mmbak so the model
+            # trains on the full spending history, not just the prior month.
+            import_all_available_actuals(year, month)
 
             prediction = get_prediction_for_month(total_budget, year, month,
                                                   force_refresh=True)
@@ -199,22 +240,11 @@ def set_budget(request, year=None, month=None):
             for cat in CATEGORY_KEYS:
                 initial[f'pct_{cat}'] = round(prediction['percentages'][cat], 2)
 
-            adj_form = SplitAdjustmentForm(initial=initial)
+            adj_form       = SplitAdjustmentForm(initial=initial)
             splits_display = _build_splits_display(
                 prediction['percentages'], prediction['amounts']
             )
-
-            # Fetch previous month actuals for the "vs last month actual" info
-            prev_actual = (MonthlyActual.objects
-                           .filter(year=prev_year, month=prev_month)
-                           .prefetch_related('actual_splits')
-                           .first())
-            prev_actual_splits = None
-            if prev_actual:
-                prev_actual_splits = {
-                    s.category: {'amount': float(s.amount), 'pct': float(s.percentage)}
-                    for s in prev_actual.actual_splits.all()
-                }
+            actual_avg_ref = _compute_actual_avg(year, month)
 
             return render(request, 'budget/set_budget.html', {
                 'step': 2,
@@ -234,12 +264,7 @@ def set_budget(request, year=None, month=None):
                 'inv_params': prediction['inv_params'],
                 'category_icons': CATEGORY_ICONS,
                 'categories': CATEGORIES,
-                'prev_actual': prev_actual,
-                'prev_actual_splits': prev_actual_splits,
-                'prev_month_label': (
-                    f"{calendar.month_abbr[prev_month]} {prev_year}"
-                    if prev_actual else None
-                ),
+                'actual_avg_ref': actual_avg_ref,
             })
         adj_form = None
 

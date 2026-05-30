@@ -183,13 +183,19 @@
 </div>
 {% endif %}
 
-<!-- ── Prev-month actual reference (shown even without current budget) ──── -->
+<!-- ── Avg. actual spending reference (all imported months) ─────────────── -->
 {% if prev_actual_ref %}
 <div class="card mb-4">
   <div class="card-header d-flex align-items-center gap-2">
     <i class="bi bi-receipt text-gold"></i>
-    {{ prev_actual_ref.label }} — Actual Spending
-    <span class="ms-auto fw-semibold text-gold" style="font-size:.85rem;">₹{{ prev_actual_ref.total|indian_number }}</span>
+    <span>
+      Avg. Actual Spending
+      <span style="font-size:.78rem;color:var(--fin-muted);margin-left:.4rem;">
+        {{ prev_actual_ref.label }}
+        {% if prev_actual_ref.n_months > 1 %}&bull; {{ prev_actual_ref.n_months }}-month avg{% endif %}
+      </span>
+    </span>
+    <span class="ms-auto fw-semibold text-gold" style="font-size:.85rem;">₹{{ prev_actual_ref.total|indian_number }}/mo</span>
   </div>
   <div class="card-body p-3">
     {% for cat_key, cat_label in categories %}
