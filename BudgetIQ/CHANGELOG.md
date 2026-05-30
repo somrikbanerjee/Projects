@@ -9,6 +9,52 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [1.0.4] — 2026-05-30
+
+### Fixed
+
+- **All charts blank — two JS syntax errors** — every Chart.js chart on the dashboard and history pages was silently failing to initialise due to two compounding bugs:
+
+  1. **`PIE_LABELS = {{ categories|safe }}`** — `categories` is a Python list of tuples. Django renders it using Python's `repr`, producing `[('groceries', 'Groceries'), ...]` — a Python tuple literal, not valid JavaScript. This crashed the pie-chart `<script>` block entirely, preventing `trendChart` (in the same block) from being registered even though its canvas existed.
+
+  2. **Missing `|safe` on all JSON template variables inside `<script>` blocks** — Django's auto-escaping converts `"` → `&quot;` in template variable output. `json.dumps` produces strings with double-quoted keys and values (e.g. `["Apr 2026", "May 2026"]`, `{"Groceries": [...]}`). Without `|safe`, these were rendered as `[&quot;Apr 2026&quot;, ...]` and `{&quot;Groceries&quot;: ...}`, which are invalid JavaScript and caused `Unexpected token '&'` parse errors. Affected variables: `chart_labels`, `mom_data.labels/curr/prev/prev_actual`, `category_series`, `actual_series` in both `dashboard.html` and `history.html`. Number-only arrays (`total_series`, `actual_totals`, `chart_totals`) required no change since `json.dumps` produces no quoted strings for numbers or `null`.
+
+  `|safe` added to all affected variables; `PIE_LABELS` switched from `{{ categories|safe }}` (which uses Python repr) to a proper Django for-loop that builds a valid JS array of strings.
+
+### Added
+
+- **Dashboard Monthly Allocation Trend now shows actuals alongside budget** — `chart_actual_totals` (actual spending totals per month) added to the dashboard view context and rendered as a second gold "Actual" bar dataset alongside the existing green "Budget" bars. Months with only actuals (no budget set) show a gold actual bar; months with only a budget show a green budget bar. Card renamed "Monthly Allocation Trend" with a Budget/Actual colour legend in the header.
+
+- **History "Category Allocation Trend" smart default mode** — the view now computes `default_stack_mode`: `'actual'` when more months have actuals than budgets, `'budget'` otherwise. The stacked chart initialises with the mode that has the most data, and `showStack(DEFAULT_STACK_MODE)` syncs the button highlight to match. Previously the chart always defaulted to "Budget" mode, appearing blank when most months were actuals-only.
+
+- **History "Total Budget vs Actual Spending" — corrected `null` encoding** — changed `json.dumps([..., 'null'])` (which produced the JSON *string* `"null"`) to `json.dumps([..., None])` (which produces the JSON *value* `null`). The previous encoding required a `.map(v => v === 'null' ? null : v)` workaround in every chart; the workaround is now removed.
+
+---
+
+## [1.0.3] — 2026-05-30
+
+### Added
+
+- **`ADVANCE_BUDGET_DAY = 25`** constant in `views.py` — single threshold controlling when the app shifts into "next-month planning" mode.
+
+- **`_next_ym(year, month)`** helper in `views.py` — returns `(year, month+1)` with December roll-over.
+
+### Changed
+
+- **After the 25th, the dashboard displays the next month** rather than the current calendar month. `year, month` in the dashboard view is set to `_next_ym(now.year, now.month)` when `now.day >= ADVANCE_BUDGET_DAY`, so every downstream computation — `current_budget` lookup, Category Splits card, Living Budget, allocation donut, MoM chart, trend chart, actuals avg cutoff — automatically resolves to the correct next-month values. Before the 25th the behaviour is unchanged.
+
+- **Dashboard header** shows "June 2026" (not "May 2026") when in next-month mode. The subtitle appends "— planning ahead from May 30" so the user knows why the month has shifted.
+
+- **"Set Budget" button on dashboard** links to `set_budget_month budget_year budget_month`, which is now the same as the display month — June after the 25th, current month before it. Label reads "Set Jun Budget" dynamically.
+
+- **`set_budget` default month** — when accessed via the default URL (no explicit year/month in the path) after the 25th, the form targets next month's budget. If the user navigates directly to `/set-budget/YYYY/MM/`, the explicit month is always respected.
+
+- **Actuals avg cutoff** in the dashboard simplified — no longer needs a separate `if after_25th` branch. Because `year, month` already equals next month after the 25th, `_compute_actual_avg(year, month)` naturally includes the current month's partial expenses (Apr + May when displaying June from May 30).
+
+- **MoM comparison chart** now shows the correct pairing: after the 25th it compares June budget vs May budget/actual rather than May vs April.
+
+---
+
 ## [1.0.2] — 2026-05-30
 
 ### Added

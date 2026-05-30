@@ -167,11 +167,11 @@
 {% block extra_js %}
 {% if history_rows %}
 <script>
-const LABELS       = {{ chart_labels }};
-const TOTAL_SERIES = {{ total_series }};
-const ACTUAL_TOTALS = {{ actual_totals }};
-const CAT_SERIES   = {{ category_series }};
-const ACT_SERIES   = {{ actual_series }};
+const LABELS       = {{ chart_labels|safe }};
+const TOTAL_SERIES = {{ total_series|safe }};
+const ACTUAL_TOTALS = {{ actual_totals|safe }};
+const CAT_SERIES   = {{ category_series|safe }};
+const ACT_SERIES   = {{ actual_series|safe }};
 const COLORS = [
   '#00c896','#f0b429','#58a6ff','#bc8cff','#3fb950',
   '#ff7b72','#f778ba','#79c0ff','#a5d6ff','#ffa657','#adbac7','#636e72'
@@ -193,7 +193,7 @@ new Chart(document.getElementById('totalTrend'), {
       },
       {
         label: 'Actual',
-        data: ACTUAL_TOTALS.map(v => v === 'null' ? null : v),
+        data: ACTUAL_TOTALS,
         backgroundColor: 'rgba(240,180,41,.45)',
         borderColor: '#f0b429', borderWidth: 2, borderRadius: 5,
         order: 1,
@@ -222,11 +222,13 @@ function buildStackDatasets(mode) {
     label: name,
     data: mode === 'budget'
       ? CAT_SERIES[name]
-      : ACT_SERIES[name].map(v => v === null ? 0 : v),
+      : ACT_SERIES[name].map(v => v == null ? 0 : v),
     backgroundColor: COLORS[i % COLORS.length],
     stack: 'stack',
   }));
 }
+
+const DEFAULT_STACK_MODE = '{{ default_stack_mode }}';
 
 function showStack(mode) {
   const isBudget = mode === 'budget';
@@ -240,7 +242,7 @@ function showStack(mode) {
 
 stackChart = new Chart(document.getElementById('stackedChart'), {
   type: 'bar',
-  data: { labels: LABELS, datasets: buildStackDatasets('budget') },
+  data: { labels: LABELS, datasets: buildStackDatasets(DEFAULT_STACK_MODE) },
   options: {
     responsive: true, maintainAspectRatio: false,
     plugins: {
@@ -257,6 +259,8 @@ stackChart = new Chart(document.getElementById('stackedChart'), {
     }
   }
 });
+// Sync button state to the default mode chosen by the server
+showStack(DEFAULT_STACK_MODE);
 </script>
 {% endif %}
 {% endblock %}

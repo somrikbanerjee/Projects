@@ -9,12 +9,21 @@
     <h4 class="mb-0 fw-bold">
       <i class="bi bi-bar-chart-fill text-fin me-2"></i>{{ month_name }} {{ year }}
     </h4>
-    <div class="text-muted" style="font-size:.82rem;">{{ location }} Budget Intelligence</div>
+    <div class="text-muted" style="font-size:.82rem;">
+      {{ location }} Budget Intelligence
+      {% if after_25th %}
+      &mdash; <span style="color:var(--fin-gold);font-size:.78rem;">planning ahead from {{ cal_month_name }} {{ cal_day }}</span>
+      {% endif %}
+    </div>
   </div>
-  <div class="col-auto d-flex gap-2">
-    <a href="{% url 'set_budget_month' year month %}" class="btn btn-gold">
-      <i class="bi bi-{% if current_budget %}pencil{% else %}plus-lg{% endif %} me-1"></i>
-      {% if current_budget %}Update{% else %}Set{% endif %} Budget
+  <div class="col-auto d-flex gap-2 align-items-center">
+    {% if after_25th %}
+    <span style="font-size:.75rem;color:var(--fin-muted);padding:.25rem .6rem;border-radius:12px;background:rgba(240,180,41,.1);border:1px solid rgba(240,180,41,.2);">
+      <i class="bi bi-calendar-arrow-up me-1" style="color:var(--fin-gold);"></i>Preparing {{ budget_month_name }} budget
+    </span>
+    {% endif %}
+    <a href="{% url 'set_budget_month' budget_year budget_month %}" class="btn btn-gold">
+      <i class="bi bi-plus-lg me-1"></i>Set {{ budget_month_name }} Budget
     </a>
     {% if current_budget %}
     <form method="post" action="{% url 'delete_budget' year month %}"
@@ -239,7 +248,11 @@
 {% if recent_rows %}
 <div class="card mb-4">
   <div class="card-header d-flex align-items-center gap-2">
-    <i class="bi bi-graph-up text-fin"></i> Monthly Budget Trend
+    <i class="bi bi-graph-up text-fin"></i> Monthly Allocation Trend
+    <span class="ms-auto" style="font-size:.74rem;color:var(--fin-muted);">
+      <span style="display:inline-block;width:10px;height:10px;background:rgba(0,200,150,.4);border:1px solid #00c896;border-radius:2px;margin-right:4px;"></span>Budget
+      <span style="display:inline-block;width:10px;height:10px;background:rgba(240,180,41,.4);border:1px solid #f0b429;border-radius:2px;margin-left:8px;margin-right:4px;"></span>Actual
+    </span>
   </div>
   <div class="card-body" style="height:220px;">
     <canvas id="trendChart"></canvas>
@@ -336,7 +349,7 @@
 {% block extra_js %}
 {% if current_budget %}
 <script>
-const PIE_LABELS = {{ categories|safe }};
+const PIE_LABELS = [{% for cat_key, cat_label in categories %}"{{ cat_label }}",{% endfor %}];
 const PIE_DATA = [
   {% with splits=current_budget.splits.all %}
   {% for cat_key, _ in categories %}
@@ -426,20 +439,20 @@ new Chart(document.getElementById('pieChart'), {
 const MOM_DATASETS = [
   {
     label: '{{ mom_data.curr_label }} Budget',
-    data: {{ mom_data.curr }},
+    data: {{ mom_data.curr|safe }},
     backgroundColor: 'rgba(0,200,150,.75)',
     borderColor: '#00c896', borderWidth: 1, borderRadius: 4,
   },
   {
     label: '{{ mom_data.prev_label }} Budget',
-    data: {{ mom_data.prev }},
+    data: {{ mom_data.prev|safe }},
     backgroundColor: 'rgba(240,180,41,.45)',
     borderColor: '#f0b429', borderWidth: 1, borderRadius: 4,
   },
   {% if mom_data.prev_actual %}
   {
     label: '{{ mom_data.prev_actual_label }}',
-    data: {{ mom_data.prev_actual }},
+    data: {{ mom_data.prev_actual|safe }},
     backgroundColor: 'rgba(240,180,41,.15)',
     borderColor: '#f0b429', borderWidth: 2, borderRadius: 4,
     borderDash: [4,3],
@@ -449,7 +462,7 @@ const MOM_DATASETS = [
 ];
 new Chart(document.getElementById('momChart'), {
   type: 'bar',
-  data: { labels: {{ mom_data.labels }}, datasets: MOM_DATASETS },
+  data: { labels: {{ mom_data.labels|safe }}, datasets: MOM_DATASETS },
   options: {
     responsive: true, maintainAspectRatio: false,
     plugins: {
@@ -470,20 +483,34 @@ new Chart(document.getElementById('momChart'), {
 new Chart(document.getElementById('trendChart'), {
   type: 'bar',
   data: {
-    labels: {{ chart_labels }},
-    datasets: [{
-      label: 'Total Budget (₹)',
-      data: {{ chart_totals }},
-      backgroundColor: 'rgba(0,200,150,.25)',
-      borderColor: '#00c896', borderWidth: 2, borderRadius: 6,
-    }]
+    labels: {{ chart_labels|safe }},
+    datasets: [
+      {
+        label: 'Budget',
+        data: {{ chart_totals|safe }},
+        backgroundColor: 'rgba(0,200,150,.35)',
+        borderColor: '#00c896', borderWidth: 2, borderRadius: 5,
+        order: 2,
+      },
+      {
+        label: 'Actual',
+        data: {{ chart_actual_totals|safe }},
+        backgroundColor: 'rgba(240,180,41,.45)',
+        borderColor: '#f0b429', borderWidth: 2, borderRadius: 5,
+        order: 1,
+      },
+    ]
   },
   options: {
     responsive: true, maintainAspectRatio: false,
-    plugins: { legend: { display: false } },
+    plugins: {
+      legend: { display: false },
+      tooltip: { callbacks: { label: ctx => ` ${ctx.dataset.label}: ₹${(ctx.parsed.y||0).toLocaleString('en-IN',{minimumFractionDigits:2})}` } }
+    },
     scales: {
       x: { ticks: { color: '#adbac7' }, grid: { color: '#21262d' } },
-      y: { ticks: { color: '#adbac7', callback: v => '₹' + (v/1000).toFixed(0) + 'k' }, grid: { color: '#21262d' } }
+      y: { ticks: { color: '#adbac7', callback: v => '₹' + (v/1000).toFixed(0) + 'k' },
+           grid: { color: '#21262d' } }
     }
   }
 });

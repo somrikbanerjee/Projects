@@ -68,6 +68,16 @@ def _compute_actual_avg(before_year: int, before_month: int) -> dict | None:
     }
 
 
+# After this day-of-month, "Set Budget" defaults to the following month and
+# the current month's partial expenses are included in actuals averages.
+ADVANCE_BUDGET_DAY = 25
+
+
+def _next_ym(year: int, month: int) -> tuple[int, int]:
+    """Return the (year, month) tuple for the month after the given one."""
+    return (year, month + 1) if month < 12 else (year + 1, 1)
+
+
 def _now_india():
     return timezone.now().astimezone(
         datetime.timezone(datetime.timedelta(hours=5, minutes=30))
@@ -95,7 +105,12 @@ def _actuals_map(budget_qs):
 
 def dashboard(request):
     now = _now_india()
-    year, month = now.year, now.month
+    after_25th = now.day >= ADVANCE_BUDGET_DAY
+
+    # After the 25th: the dashboard displays the *next* month (the one being
+    # budgeted) so the newly set budget is visible in the main split view.
+    # Before the 25th: display the current calendar month as usual.
+    year, month = _next_ym(now.year, now.month) if after_25th else (now.year, now.month)
 
     current_budget = (MonthlyBudget.objects
                       .filter(year=year, month=month, is_dummy=False)
@@ -130,12 +145,13 @@ def dashboard(request):
             mb.actual_data = ma
         recent_rows.append({'budget': mb, 'actual': ma, 'year': ym[0], 'month': ym[1]})
 
-    # Keep recent_budgets for backward-compat chart data
-    chart_labels, chart_totals = [], []
+    chart_labels, chart_totals, chart_actual_totals = [], [], []
     for row in recent_rows:
-        lbl = f"{calendar.month_abbr[row['month']]} {row['year']}"
-        chart_labels.append(lbl)
+        chart_labels.append(f"{calendar.month_abbr[row['month']]} {row['year']}")
         chart_totals.append(float(row['budget'].total_budget) if row['budget'] else 0)
+        chart_actual_totals.append(
+            float(row['actual'].total_actual) if row['actual'] else None
+        )
 
     # Previous month — needed for MoM and the reference panel
     prev_month = month - 1 if month > 1 else 12
@@ -169,8 +185,11 @@ def dashboard(request):
             mom_data['prev_actual']       = json.dumps([prev_act.get(cat, 0) for cat, _ in CATEGORIES])
             mom_data['prev_actual_label'] = f"{prev_budget.month_year_label} Actual"
 
-    # Actuals summary card — average across all available months before today
+    # Actuals avg: use year/month as cutoff — already equals next month after the 25th,
+    # so Apr+May actuals are included automatically when displaying June.
     prev_actual_ref = _compute_actual_avg(year, month)
+
+    budget_year, budget_month = year, month
 
     settings = AppSettings.get()
     cost_snapshot = get_or_fetch_cost_snapshot(year, month, city=settings.location)
@@ -189,9 +208,18 @@ def dashboard(request):
         'current_budget':   current_budget,
         'year': year, 'month': month,
         'month_name':       calendar.month_name[month],
+        'budget_year':       budget_year,
+        'budget_month':      budget_month,
+        'budget_month_name': calendar.month_abbr[budget_month],
+        'after_25th':        after_25th,
+        'cal_month_name':    calendar.month_name[now.month],
+        'cal_day':           now.day,
         'recent_rows':      recent_rows,
-        'chart_labels':     json.dumps(chart_labels),
-        'chart_totals':     json.dumps(chart_totals),
+        'chart_labels':        json.dumps(chart_labels),
+        'chart_totals':        json.dumps(chart_totals),
+        'chart_actual_totals': json.dumps(
+            [v if v is not None else None for v in chart_actual_totals]
+        ),
         'mom_data':         mom_data,
         'prev_actual_ref':  prev_actual_ref,
         'category_icons':   CATEGORY_ICONS,
@@ -210,10 +238,18 @@ def dashboard(request):
 
 def set_budget(request, year=None, month=None):
     now = _now_india()
-    if year is None:
-        year = now.year
-    if month is None:
-        month = now.month
+    if year is None and month is None:
+        # After the 25th: default to next month's budget so current month's
+        # partial expenses can be included as training/reference data.
+        if now.day >= ADVANCE_BUDGET_DAY:
+            year, month = _next_ym(now.year, now.month)
+        else:
+            year, month = now.year, now.month
+    else:
+        if year is None:
+            year = now.year
+        if month is None:
+            month = now.month
 
     existing = MonthlyBudget.objects.filter(year=year, month=month).first()
 
@@ -383,15 +419,22 @@ def history(request):
     total_series  = [float(r['budget'].total_budget) if r['budget'] else 0 for r in recent_rows]
     actual_totals = [float(r['actual'].total_actual) if r['actual'] else None for r in recent_rows]
 
+    # Determine the default mode for the stacked chart: whichever source has
+    # more months of data.  Typically actuals accumulate faster than budgets.
+    actual_months_count = sum(1 for r in recent_rows if r['actual'])
+    budget_months_count = sum(1 for r in recent_rows if r['budget'])
+    default_stack_mode  = 'actual' if actual_months_count >= budget_months_count else 'budget'
+
     return render(request, 'budget/history.html', {
-        'history_rows':     history_rows,
-        'chart_labels':     json.dumps(chart_labels),
-        'category_series':  json.dumps(category_series),
-        'actual_series':    json.dumps(actual_series),
-        'total_series':     json.dumps(total_series),
-        'actual_totals':    json.dumps([v if v is not None else 'null' for v in actual_totals]),
-        'categories':       CATEGORIES,
-        'category_icons':   CATEGORY_ICONS,
+        'history_rows':       history_rows,
+        'chart_labels':       json.dumps(chart_labels),
+        'category_series':    json.dumps(category_series),
+        'actual_series':      json.dumps(actual_series),   # None → JSON null via json.dumps
+        'total_series':       json.dumps(total_series),
+        'actual_totals':      json.dumps(actual_totals),   # None → JSON null via json.dumps
+        'default_stack_mode': default_stack_mode,
+        'categories':         CATEGORIES,
+        'category_icons':     CATEGORY_ICONS,
     })
 
 

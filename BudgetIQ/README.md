@@ -22,17 +22,18 @@ Supports 16 cities out of the box: Ahmedabad, Bangalore, Chandigarh, Chennai, Co
 - **Rent (home guarantee)** — rent is deducted as a fixed amount before the ML split. Home's final allocation = rent + home's proportional share of the ML pool, so home is always greater than rent with no fragile floor logic. ML pool = total − investment − EMI − rent; this remainder is split across all 10 ML categories including home
 
 ### Dashboard
+- **After-25th next-month mode** — from the 25th of every month, the dashboard automatically shifts its "current" perspective to the following month. The header shows June 2026 (not May), the Category Splits card shows the June budget just set, the MoM chart compares June vs May, and the actuals average includes the current month's partial data. A subtitle reads "planning ahead from May 30" so the context is always clear. Before the 25th the behaviour is the standard current-month display.
 - Stat pills: total budget, investment, rent
 - Category splits with coloured progress bars, percentages, and amounts
 - Right column: Living Budget card (total − investment − rent − EMI), allocation donut with leader-line labels, live cost data (CPI, petrol, indices)
-- **Average actual spending card** — always visible on the dashboard; shows the average spending per category across all imported months (e.g. "Mar–Apr 2026 · 2-month avg"), with progress bars and a per-month average total. Grows richer as more months of history accumulate
+- **Average actual spending card** — always visible on the dashboard; shows the average spending per category across all imported months (e.g. "Mar–Apr 2026 · 2-month avg"), with progress bars and a per-month average total. After the 25th, the current month's partial expenses are included in the average automatically. Grows richer as more months of history accumulate
 - Month-over-month comparison chart: current budget vs previous budget and previous actuals side-by-side
-- Monthly budget trend chart; recent months table with paired Budget/Actual rows per month
-- Actuals-only months (imported but no budget set) appear in the Recent Months table with a `+` button to set a budget
+- **Monthly Allocation Trend chart** — grouped bar chart showing green Budget bars and gold Actual bars per month; months with only actuals or only a budget each show their respective bar. Budget and Actual series are populated independently so no month appears blank
+- Recent months table with paired Budget/Actual rows per month; actuals-only months appear with a `+` button to set a budget
 
 ### History
-- Total budget vs actual spending trend chart (overlaid bar chart)
-- Category allocation trend chart with **Budget / Actual toggle** — switch between budgeted and actual percentage stacks
+- **Total Budget vs Actual Spending** — overlaid grouped bar chart; green Budget bars for months with a saved budget, gold Actual bars for months with imported spending data; months can have one or both
+- **Category Allocation Trend** with **Budget / Actual toggle** — stacked percentage chart; defaults to the mode (Budget or Actual) that has the most months of data so the chart is never blank on first load
 - Full monthly detail table with paired Budget and Actual rows per month; actuals-only months included
 - Each actual row shows the source `.mmbak` filename for traceability
 - Edit and delete actions per month
@@ -162,7 +163,7 @@ The server runs with `--noreload` to prevent Django's file-watcher from polling 
 ## Usage
 
 1. **Dashboard** — landing page shows the current month's budget split (if set), Living Budget breakdown, allocation donut, and live cost data. The previous month's actual spending is always shown as a reference card. Below: MoM comparison chart, trend chart, and a Recent Months table with Budget/Actual paired rows.
-2. **Set Budget** — enter your total monthly income. BudgetIQ automatically imports **every available month** of actuals from the latest `.mmbak` backup, retrains the CNN-GRU model on the full history, and generates a suggested split. The averaged actuals across all imported months are displayed as a reference panel while you review and adjust.
+2. **Set Budget** — enter your total monthly income. BudgetIQ automatically imports **every available month** of actuals from the latest `.mmbak` backup (including the current month's partial data when after the 25th), retrains the CNN-GRU model on the full history, and generates a suggested split. The averaged actuals across all imported months are displayed as a reference panel while you review and adjust. Before the 25th the form targets the current month; from the 25th onwards it defaults to next month.
 3. **History** — all recorded months in a unified table (budget + actuals side by side); months with actuals but no budget also appear. Toggle the stacked chart between budgeted and actual allocations.
 4. **Settings** — select your city, update monthly rent, loan EMI amount, and EMI end date.
 
