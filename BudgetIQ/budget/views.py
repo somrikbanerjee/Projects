@@ -1,4 +1,5 @@
 import json
+import os
 import calendar
 import datetime
 
@@ -15,7 +16,10 @@ from .models import (
 from .forms import BudgetInputForm, SplitAdjustmentForm, AppSettingsForm
 from .ml_engine import get_prediction_for_month, pct_to_amounts, CATEGORIES as CATEGORY_KEYS
 from .cost_data import get_or_fetch_cost_snapshot, resolve_city_from_coords, SUPPORTED_CITIES
-from .mmbak_importer import import_actuals_for_month, import_all_available_actuals
+from .mmbak_importer import (
+    import_actuals_for_month, import_all_available_actuals,
+    find_latest_mmbak, get_all_account_balances,
+)
 
 
 def _compute_actual_avg(before_year: int, before_month: int) -> dict | None:
@@ -521,6 +525,272 @@ def api_detect_location(request):
 
 
 # ── helpers ───────────────────────────────────────────────────────────────────
+
+# ── Income Splitter ───────────────────────────────────────────────────────────
+
+_SPLITTER_ACCOUNT_KEYS = {
+    'hdfc':  'HDFC Bank',
+    'idfc':  'IDFC First Bank',
+    'union': 'Union Bank of India',
+    'slice': 'Slice Small Finance Bank',
+}
+
+_INCOME_FIXED_DED_1 = 28_168
+_INCOME_FIXED_DED_2 = 38_500
+_SLICE_CAP          = 200_000.0   # Slice SFB balance ceiling
+
+
+def _match_account(target: str, all_balances: dict):
+    """Return (balance, matched_name) via exact → case-insensitive → partial match."""
+    if target in all_balances:
+        return all_balances[target], target
+    for name, bal in all_balances.items():
+        if name.lower() == target.lower():
+            return bal, name
+    tl = target.lower()
+    for name, bal in all_balances.items():
+        if tl in name.lower() or name.lower() in tl:
+            return bal, name
+    return None, target
+
+
+def _split_5_3_2(amount: float):
+    """Split `amount` in HDFC:IDFC:Union = 5:3:2 (50 % : 30 % : 20 %).
+    Returns (to_hdfc, to_idfc, to_union) — remainder goes to HDFC."""
+    to_idfc  = round(amount * 0.30, 2)
+    to_union = round(amount * 0.20, 2)
+    to_hdfc  = round(amount - to_idfc - to_union, 2)
+    return to_hdfc, to_idfc, to_union
+
+
+def income_splitter(request):
+    filepath     = find_latest_mmbak()
+    mmbak_name   = os.path.basename(filepath) if filepath else None
+    all_balances = get_all_account_balances(filepath) if filepath else {}
+    mmbak_error  = None if filepath else "No .mmbak backup file found in the MoneyManager folder."
+
+    current = {}
+    matched = {}
+    for key, target in _SPLITTER_ACCOUNT_KEYS.items():
+        bal, name = _match_account(target, all_balances)
+        current[key] = bal
+        matched[key] = name
+
+    slice_cur = current.get('slice')
+
+    # Slice overflow check — computed on every load so REDISTRIBUTE is always fresh.
+    # Also exposed as a standalone result when ?redistribute=1 is passed.
+    slice_overflow_preview = None
+    if slice_cur is not None and slice_cur > _SLICE_CAP:
+        excess = round(slice_cur - _SLICE_CAP, 2)
+        p_hdfc, p_idfc, p_union = _split_5_3_2(excess)
+        slice_overflow_preview = {
+            'excess':   excess,
+            'to_hdfc':  p_hdfc,
+            'to_idfc':  p_idfc,
+            'to_union': p_union,
+        }
+
+    # Standalone redistribute mode — show overflow result on the right panel
+    redistribute_result = None
+    if request.method == 'GET' and request.GET.get('redistribute'):
+        if slice_overflow_preview:
+            # Enrich with new balances for each account
+            rdist = dict(slice_overflow_preview)
+            rdist['slice_new']  = round(_SLICE_CAP, 2)
+            rdist['hdfc_new']   = (round(current['hdfc'] + rdist['to_hdfc'], 2)
+                                   if current['hdfc'] is not None else None)
+            rdist['idfc_new']   = (round(current['idfc'] + rdist['to_idfc'], 2)
+                                   if current['idfc'] is not None else None)
+            rdist['union_new']  = (round(current['union'] + rdist['to_union'], 2)
+                                   if current['union'] is not None else None)
+            redistribute_result = rdist
+        else:
+            redistribute_result = {}   # empty dict = "nothing to redistribute" sentinel
+
+    result            = None
+    income_input      = None
+    error             = None
+    landing_key       = 'slice'      # default; updated from POST below
+    slice_cap_form    = _SLICE_CAP   # value shown in the form input; updated from POST
+
+    if request.method == 'POST':
+        try:
+            raw = request.POST.get('income', '').replace(',', '').strip()
+            income_input = float(raw)
+            landing_key  = request.POST.get('landing_account', 'slice')
+            if landing_key not in _SPLITTER_ACCOUNT_KEYS:
+                landing_key = 'slice'
+
+            # User-configurable Slice cap (default 2 L)
+            cap_raw = request.POST.get('slice_cap_input', '').replace(',', '').strip()
+            try:
+                slice_cap_used = round(float(cap_raw), 2) if cap_raw else _SLICE_CAP
+                if slice_cap_used < 0:
+                    slice_cap_used = _SLICE_CAP
+            except ValueError:
+                slice_cap_used = _SLICE_CAP
+            slice_cap_form = slice_cap_used   # persist in form for re-render
+
+            if income_input <= 0:
+                raise ValueError("Income must be a positive amount.")
+
+            X    = income_input
+            ded1 = 0.0
+            ded2 = 0.0
+            if X >= _INCOME_FIXED_DED_1:
+                ded1 = float(_INCOME_FIXED_DED_1); X -= ded1
+            if X >= _INCOME_FIXED_DED_2:
+                ded2 = float(_INCOME_FIXED_DED_2); X -= ded2
+
+            distributable = round(X, 2)
+            post_ded1     = round(income_input - ded1, 2)
+
+            # ── Base income allocations (before any cap adjustment) ──────
+            slice_normal = round(distributable * 0.10, 2)
+            idfc_base    = round(distributable * 0.20, 2)
+            union_base   = round(distributable * 0.20, 2)
+
+            cap_case              = None
+            slice_alloc           = slice_normal
+            slice_income_overflow = 0.0   # Slice's income share redirected to others
+            slice_excess          = 0.0   # Pre-existing Slice excess to move out (Case 2)
+
+            if slice_cur is not None:
+                if slice_cur >= slice_cap_used:
+                    # Case 2: Slice already over cap — give it nothing, move excess out
+                    cap_case              = 'pre'
+                    slice_alloc           = 0.0
+                    slice_income_overflow = slice_normal
+                    slice_excess          = round(slice_cur - slice_cap_used, 2)
+                elif round(slice_cur + slice_normal, 2) > slice_cap_used:
+                    # Case 3: Top Slice up to exactly the cap, redirect the rest
+                    cap_case              = 'post'
+                    slice_alloc           = round(slice_cap_used - slice_cur, 2)
+                    slice_income_overflow = round(slice_normal - slice_alloc, 2)
+
+            # ── Redistribute Slice's income overflow (5:3:2 → HDFC:IDFC:Union) ──
+            inc_ov_hdfc, inc_ov_idfc, inc_ov_union = _split_5_3_2(slice_income_overflow)
+
+            idfc_income  = round(idfc_base + inc_ov_idfc,  2)
+            union_income = round(union_base + inc_ov_union, 2)
+            hdfc_var_inc = round(distributable - slice_alloc - idfc_income - union_income, 2)
+
+            # ── Redistribute pre-existing Slice excess (Case 2, 5:3:2) ──────────
+            exc_hdfc, exc_idfc, exc_union = _split_5_3_2(slice_excess)
+
+            # ── Final combined allocations ───────────────────────────────────────
+            idfc_alloc  = round(idfc_income  + exc_idfc,  2)
+            union_alloc = round(union_income + exc_union, 2)
+            hdfc_var    = round(hdfc_var_inc + exc_hdfc,  2)
+            hdfc_alloc  = round(hdfc_var + ded1 + ded2,   2)
+
+            # ── New balances ─────────────────────────────────────────────────────
+            # mmbak balances are pre-income; new balance = current + allocation for all accounts.
+            def _new_bal(cur_bal, alloc):
+                return round(cur_bal + alloc, 2) if cur_bal is not None else None
+
+            # Slice new balance caps at the user-set cap when either cap case fires
+            if cap_case and slice_cur is not None:
+                slice_new_bal = round(slice_cap_used, 2)
+            else:
+                slice_new_bal = _new_bal(slice_cur, slice_alloc)
+
+            # pct label for the allocation table
+            if cap_case == 'pre':
+                slice_pct = '0 % (over cap)'
+            elif cap_case == 'post':
+                p = round(slice_alloc / distributable * 100, 1) if distributable else 0
+                slice_pct = f'{p} % (capped)'
+            else:
+                slice_pct = '10 %'
+
+            result = {
+                'income':        income_input,
+                'ded1':          ded1,
+                'ded2':          ded2,
+                'post_ded1':     post_ded1,
+                'distributable': distributable,
+                'hdfc_var':      hdfc_var,
+                'rows': [
+                    {
+                        'key':     'slice',
+                        'name':    matched['slice'],
+                        'pct':     slice_pct,
+                        'alloc':   slice_alloc,
+                        'current': slice_cur,
+                        'new_bal': slice_new_bal,
+                    },
+                    {
+                        'key':     'idfc',
+                        'name':    matched['idfc'],
+                        'pct':     '20 %' if not cap_case else '20 % + overflow',
+                        'alloc':   idfc_alloc,
+                        'current': current['idfc'],
+                        'new_bal': _new_bal(current['idfc'], idfc_alloc),
+                    },
+                    {
+                        'key':     'union',
+                        'name':    matched['union'],
+                        'pct':     '20 %' if not cap_case else '20 % + overflow',
+                        'alloc':   union_alloc,
+                        'current': current['union'],
+                        'new_bal': _new_bal(current['union'], union_alloc),
+                    },
+                    {
+                        'key':     'hdfc',
+                        'name':    matched['hdfc'],
+                        'pct':     'Remainder',
+                        'alloc':   hdfc_alloc,
+                        'current': current['hdfc'],
+                        'new_bal': _new_bal(current['hdfc'], hdfc_alloc),
+                    },
+                ],
+                # Total leaving the landing account
+                'landing_key':  landing_key,
+                'landing_name': matched[landing_key],
+                'total_out': round(
+                    sum(a for k, a in [
+                        ('slice', slice_alloc), ('idfc', idfc_alloc),
+                        ('union', union_alloc), ('hdfc', hdfc_alloc),
+                    ] if k != landing_key),
+                    2,
+                ),
+                # Cap meta — used by the template for "What to do" section
+                'cap_case':              cap_case,
+                'slice_cap_used':        slice_cap_used,
+                'slice_income_overflow': slice_income_overflow,
+                'slice_excess':          slice_excess,
+                'exc_hdfc':              exc_hdfc,
+                'exc_idfc':              exc_idfc,
+                'exc_union':             exc_union,
+                # Income-only amounts (needed to break down Case 2 "What to do")
+                'idfc_from_income':   idfc_income,
+                'union_from_income':  union_income,
+                'hdfc_from_income':   round(hdfc_var_inc + ded1 + ded2, 2),
+            }
+
+        except (ValueError, TypeError) as exc:
+            error = str(exc)
+
+    return render(request, 'budget/income_splitter.html', {
+        'current':                current,
+        'matched':                matched,
+        'all_balances':           all_balances,
+        'mmbak_error':            mmbak_error,
+        'mmbak_name':             mmbak_name,
+        'result':                 result,
+        'income_input':           income_input,
+        'error':                  error,
+        'ded1':                   _INCOME_FIXED_DED_1,
+        'ded2':                   _INCOME_FIXED_DED_2,
+        'slice_cap':              int(_SLICE_CAP),    # default cap (for redistribute / preview)
+        'slice_cap_form':         slice_cap_form,     # persists form input across submits
+        'slice_overflow_preview': slice_overflow_preview,
+        'redistribute_result':    redistribute_result,
+        'landing_key':            landing_key,
+    })
+
 
 def _build_splits_display(percentages: dict, amounts: dict) -> list:
     rows = []

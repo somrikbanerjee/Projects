@@ -1,0 +1,820 @@
+{% extends 'budget/base.html' %}
+{% load budget_filters %}
+
+{% block title %}Income Splitter — BudgetIQ{% endblock %}
+{% block nav_splitter %}active{% endblock %}
+
+{% block extra_head %}
+<style>
+  .acct-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: .5rem .85rem; border-radius: 8px;
+    background: rgba(255,255,255,.04); border: 1px solid var(--fin-border);
+    margin-bottom: .4rem;
+  }
+  .acct-row .acct-name { font-size: .83rem; color: var(--fin-muted); }
+  .acct-row .acct-bal  { font-size: .9rem; font-weight: 600; color: var(--fin-text); white-space: nowrap; }
+  .acct-row.over-cap   { border-color: rgba(248,81,73,.3); background: rgba(248,81,73,.06); }
+  .acct-row.over-cap .acct-bal { color: var(--fin-danger); }
+
+  .step-row {
+    display: flex; align-items: flex-start; gap: .75rem;
+    padding: .7rem 0; border-bottom: 1px solid var(--fin-border);
+  }
+  .step-row:last-child { border-bottom: none; }
+  .step-badge {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 1.65rem; height: 1.65rem; border-radius: 50%;
+    background: rgba(0,200,150,.12); border: 1px solid rgba(0,200,150,.3);
+    color: var(--fin-primary); font-size: .72rem; font-weight: 700; flex-shrink: 0;
+  }
+  .step-label { font-size: .8rem; color: var(--fin-muted); margin-bottom: .15rem; }
+  .step-value { font-size: .9rem; font-weight: 600; color: var(--fin-text); }
+  .step-eq    { font-size: .82rem; color: var(--fin-muted); }
+
+  .alloc-table { width: 100%; border-collapse: separate; border-spacing: 0 .4rem; }
+  .alloc-table thead th {
+    font-size: .72rem; text-transform: uppercase; letter-spacing: .7px;
+    color: var(--fin-muted); padding: .25rem .9rem; font-weight: 500;
+  }
+  .alloc-table tbody tr td {
+    padding: .65rem .9rem; vertical-align: middle;
+    border-top: 1px solid var(--fin-border); border-bottom: 1px solid var(--fin-border);
+  }
+  .alloc-table tbody tr td:first-child { border-left: 1px solid var(--fin-border); border-radius: 10px 0 0 10px; }
+  .alloc-table tbody tr td:last-child  { border-right: 1px solid var(--fin-border); border-radius: 0 10px 10px 0; }
+  .alloc-table tbody tr               { background: rgba(255,255,255,.03); }
+  .alloc-table tbody tr.hdfc-row      { background: rgba(0,200,150,.05); }
+  .alloc-table tbody tr.hdfc-row td   { border-color: rgba(0,200,150,.25); }
+  .alloc-table tbody tr.slice-capped  { background: rgba(248,81,73,.04); }
+  .alloc-table tbody tr.slice-capped td { border-color: rgba(248,81,73,.2); }
+
+  .t-pill {
+    display: inline-flex; align-items: center; gap: .4rem;
+    padding: .35rem .85rem; border-radius: 20px; font-size: .8rem; font-weight: 600;
+  }
+  .t-pill-out  { background: rgba(75,159,255,.12); border: 1px solid rgba(75,159,255,.3); color: #4b9fff; }
+  .t-pill-keep { background: rgba(0,200,150,.12);  border: 1px solid rgba(0,200,150,.3);  color: var(--fin-primary); }
+  .t-pill-warn { background: rgba(248,81,73,.1);   border: 1px solid rgba(248,81,73,.3);  color: var(--fin-danger); }
+
+  .alloc-mini {
+    border-radius: 8px; padding: .5rem .8rem;
+    background: rgba(0,200,150,.07); border: 1px solid rgba(0,200,150,.18);
+  }
+  .alloc-mini.hdfc   { background: rgba(0,200,150,.12); border-color: rgba(0,200,150,.3); }
+  .alloc-mini.capped { background: rgba(248,81,73,.07); border-color: rgba(248,81,73,.25); }
+  .alloc-mini .am-label { font-size: .7rem; color: var(--fin-muted); text-transform: uppercase; letter-spacing: .6px; }
+  .alloc-mini .am-amt   { font-size: .95rem; font-weight: 700; color: var(--fin-primary); }
+  .alloc-mini.capped .am-amt { color: var(--fin-danger); }
+  .alloc-mini .am-pct   { font-size: .74rem; color: var(--fin-gold); }
+
+  .cap-banner {
+    display: flex; align-items: flex-start; gap: .6rem;
+    padding: .65rem .9rem; border-radius: 8px; margin-bottom: .75rem;
+    background: rgba(248,81,73,.08); border: 1px solid rgba(248,81,73,.28);
+    font-size: .82rem; color: #f8a5a1;
+  }
+  .cap-banner i { flex-shrink: 0; margin-top: .15rem; }
+
+  .from-slice-box {
+    border: 1px solid rgba(248,81,73,.3); border-radius: 10px;
+    padding: .75rem 1rem; background: rgba(248,81,73,.05);
+    margin-top: .75rem;
+  }
+  .from-slice-box .fs-title {
+    font-size: .78rem; font-weight: 600; color: var(--fin-danger);
+    text-transform: uppercase; letter-spacing: .6px; margin-bottom: .5rem;
+  }
+
+  .overflow-preview-card {
+    border: 1px solid rgba(248,81,73,.35); border-radius: 12px;
+    background: rgba(248,81,73,.07); padding: 1rem 1.1rem; margin-top: 1rem;
+  }
+  .overflow-preview-card .op-title {
+    font-size: .8rem; font-weight: 700; color: var(--fin-danger);
+    text-transform: uppercase; letter-spacing: .6px; margin-bottom: .6rem;
+  }
+  .op-row { display: flex; justify-content: space-between; align-items: center;
+            padding: .3rem 0; border-bottom: 1px solid rgba(248,81,73,.15);
+            font-size: .84rem; }
+  .op-row:last-child { border-bottom: none; }
+  .op-row .op-val { font-weight: 700; color: var(--fin-text); }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row g-4">
+
+  {# ─── Left: form ────────────────────────────────────────────── #}
+  <div class="col-lg-4 col-xl-3">
+    <div class="card">
+      <div class="card-header d-flex align-items-center gap-2">
+        <i class="bi bi-cash-stack text-fin"></i> Income Splitter
+        {% if result %}
+          <a href="{% url 'income_splitter' %}" class="btn btn-sm ms-auto"
+             style="background:rgba(255,255,255,.07);border:1px solid var(--fin-border);
+                    color:var(--fin-muted);border-radius:6px;font-size:.75rem;padding:.2rem .7rem;">
+            <i class="bi bi-arrow-counterclockwise me-1"></i>Reset
+          </a>
+        {% endif %}
+      </div>
+      <div class="card-body">
+
+        {% if mmbak_error %}
+          <div class="alert alert-gold py-2 mb-3">
+            <i class="bi bi-exclamation-triangle me-1"></i> {{ mmbak_error }}
+          </div>
+        {% else %}
+          <div class="mb-3 d-flex align-items-center gap-2"
+               style="font-size:.75rem;color:var(--fin-muted);">
+            <i class="bi bi-database-check text-fin"></i> {{ mmbak_name }}
+          </div>
+        {% endif %}
+
+        {# Current balances #}
+        {% if all_balances %}
+          <div class="section-title mb-2">Current Account Balances</div>
+          <div class="mb-4">
+            {% for key, bal_val, name_val in current.hdfc|yesno:"," %}{% endfor %}
+            {# render manually to control over-cap styling #}
+            <div class="acct-row">
+              <span class="acct-name">🏦 {{ matched.hdfc }}</span>
+              {% if current.hdfc is not None %}<span class="acct-bal">₹{{ current.hdfc|indian_number }}</span>
+              {% else %}<span class="acct-bal text-muted">—</span>{% endif %}
+            </div>
+            <div class="acct-row">
+              <span class="acct-name">🏛 {{ matched.idfc }}</span>
+              {% if current.idfc is not None %}<span class="acct-bal">₹{{ current.idfc|indian_number }}</span>
+              {% else %}<span class="acct-bal text-muted">—</span>{% endif %}
+            </div>
+            <div class="acct-row">
+              <span class="acct-name">🏢 {{ matched.union }}</span>
+              {% if current.union is not None %}<span class="acct-bal">₹{{ current.union|indian_number }}</span>
+              {% else %}<span class="acct-bal text-muted">—</span>{% endif %}
+            </div>
+            <div class="acct-row {% if slice_overflow_preview %}over-cap{% endif %}">
+              <span class="acct-name">💳 {{ matched.slice }}
+                {% if slice_overflow_preview %}
+                  <span class="ms-1" style="font-size:.7rem;color:var(--fin-danger);">▲ over 2L cap</span>
+                {% endif %}
+              </span>
+              {% if current.slice is not None %}<span class="acct-bal">₹{{ current.slice|indian_number }}</span>
+              {% else %}<span class="acct-bal text-muted">—</span>{% endif %}
+            </div>
+          </div>
+        {% endif %}
+
+        {# Case 4: Slice already over cap — show overflow even before income is entered #}
+        {% if slice_overflow_preview and not result %}
+          <div class="overflow-preview-card">
+            <div class="op-title">
+              <i class="bi bi-exclamation-circle me-1"></i>Slice SFB over ₹2L cap
+            </div>
+            <div style="font-size:.8rem;color:var(--fin-muted);margin-bottom:.6rem;">
+              Move ₹{{ slice_overflow_preview.excess|indian_number }} out of {{ matched.slice }}
+            </div>
+            <div class="op-row">
+              <span>🏦 {{ matched.hdfc }}</span>
+              <span class="op-val">₹{{ slice_overflow_preview.to_hdfc|indian_number }}</span>
+            </div>
+            <div class="op-row">
+              <span>🏛 {{ matched.idfc }}</span>
+              <span class="op-val">₹{{ slice_overflow_preview.to_idfc|indian_number }}</span>
+            </div>
+            <div class="op-row">
+              <span>🏢 {{ matched.union }}</span>
+              <span class="op-val">₹{{ slice_overflow_preview.to_union|indian_number }}</span>
+            </div>
+          </div>
+        {% endif %}
+
+        {% if error %}
+          <div class="mb-3 py-2 px-3 rounded"
+               style="background:rgba(248,81,73,.1);border:1px solid rgba(248,81,73,.3);
+                      color:var(--fin-danger);font-size:.85rem;">
+            <i class="bi bi-x-circle me-1"></i> {{ error }}
+          </div>
+        {% endif %}
+
+        {# Form #}
+        <form method="post" id="splitter-form" autocomplete="off">
+          {% csrf_token %}
+          <div class="mb-3">
+            <label class="form-label" for="income-input">
+              <i class="bi bi-currency-rupee me-1 text-fin"></i>Income received
+            </label>
+            <input id="income-input" type="text" name="income" inputmode="numeric"
+                   class="form-control form-control-lg" placeholder="e.g. 1,79,708"
+                   value="{% if income_input %}{{ income_input|indian_int }}{% endif %}"
+                   required>
+            <div class="mt-1" style="font-size:.73rem;color:var(--fin-muted);">
+              Commas are stripped automatically
+            </div>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label" for="slice-cap-input">
+              <i class="bi bi-shield-exclamation me-1" style="color:var(--fin-danger);"></i>
+              Slice SFB balance cap
+            </label>
+            <div class="input-group">
+              <span class="input-group-text"
+                    style="background:#1c2230;border-color:var(--fin-border);color:var(--fin-muted);">₹</span>
+              <input id="slice-cap-input" type="text" name="slice_cap_input"
+                     inputmode="numeric" class="form-control"
+                     value="{{ slice_cap_form|indian_int }}">
+            </div>
+            <div class="mt-1" style="font-size:.73rem;color:var(--fin-muted);">
+              Recommended: ₹2,00,000 &mdash; excess above this cap is redistributed 5:3:2 (HDFC:IDFC:Union)
+            </div>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label" for="landing-account">
+              <i class="bi bi-bank me-1 text-fin"></i>Income will land in
+            </label>
+            <select id="landing-account" name="landing_account" class="form-select">
+              <option value="slice"  {% if landing_key == 'slice'  %}selected{% endif %}>💳 {{ matched.slice }}</option>
+              <option value="hdfc"   {% if landing_key == 'hdfc'   %}selected{% endif %}>🏦 {{ matched.hdfc }}</option>
+              <option value="idfc"   {% if landing_key == 'idfc'   %}selected{% endif %}>🏛 {{ matched.idfc }}</option>
+              <option value="union"  {% if landing_key == 'union'  %}selected{% endif %}>🏢 {{ matched.union }}</option>
+            </select>
+          </div>
+
+          <div class="mb-3 p-3 rounded"
+               style="background:rgba(240,180,41,.07);border:1px solid rgba(240,180,41,.18);">
+            <div style="font-size:.72rem;color:var(--fin-muted);text-transform:uppercase;
+                        letter-spacing:.6px;margin-bottom:.5rem;">Split rules</div>
+            <div style="font-size:.82rem;color:var(--fin-text-soft);">
+              <div class="d-flex justify-content-between mb-1">
+                <span>Fixed deduction 1</span>
+                <span class="text-gold fw-semibold">₹{{ ded1 }}</span>
+              </div>
+              <div class="d-flex justify-content-between mb-2">
+                <span>Fixed deduction 2</span>
+                <span class="text-gold fw-semibold">₹{{ ded2 }}</span>
+              </div>
+              <hr style="border-color:var(--fin-border);margin:.35rem 0 .5rem;">
+              <div class="d-flex justify-content-between mb-1"><span>Slice SFB</span><span>10 %</span></div>
+              <div class="d-flex justify-content-between mb-1"><span>IDFC First Bank</span><span>20 %</span></div>
+              <div class="d-flex justify-content-between mb-1"><span>Union Bank of India</span><span>20 %</span></div>
+              <div class="d-flex justify-content-between">
+                <span>HDFC Bank</span>
+                <span class="text-fin fw-semibold">remainder + deductions</span>
+              </div>
+              <div class="mt-2 pt-2" style="border-top:1px solid rgba(248,81,73,.2);
+                   font-size:.76rem;color:rgba(248,81,73,.8);">
+                <i class="bi bi-shield-exclamation me-1"></i>
+                Slice SFB capped at ₹<span id="cap-preview">{{ slice_cap_form|indian_int }}</span> — overflow splits 5:3:2
+              </div>
+            </div>
+          </div>
+
+          <div class="d-flex gap-2 mb-2">
+            <button type="submit" class="btn btn-fin flex-grow-1">
+              <i class="bi bi-calculator me-2"></i>Calculate Split
+            </button>
+            {% if result %}
+              <a href="{% url 'income_splitter' %}" class="btn btn-fin-outline"
+                 title="Reset" style="padding:.55rem .9rem;">
+                <i class="bi bi-arrow-counterclockwise"></i>
+              </a>
+            {% endif %}
+          </div>
+          <a href="{% url 'income_splitter' %}?redistribute=1"
+             class="btn w-100"
+             style="background:rgba(248,81,73,.12);border:1px solid rgba(248,81,73,.35);
+                    color:#f8a5a1;font-weight:600;border-radius:8px;">
+            <i class="bi bi-shuffle me-2"></i>Redistribute Slice SFB Excess
+          </a>
+        </form>
+
+      </div>
+    </div>
+  </div>{# /left col #}
+
+  {# ─── Right: results ─────────────────────────────────────────── #}
+  <div class="col-lg-8 col-xl-9">
+
+    {# ─── Redistribute-only result (no income entered) ──── #}
+    {% if redistribute_result and redistribute_result.excess %}
+      <div class="card mb-4">
+        <div class="card-header d-flex align-items-center gap-2"
+             style="border-color:rgba(248,81,73,.3);">
+          <i class="bi bi-shuffle" style="color:var(--fin-danger);"></i>
+          Slice SFB Excess Redistribution
+          <span class="ms-auto badge"
+                style="background:rgba(248,81,73,.15);color:var(--fin-danger);
+                       border:1px solid rgba(248,81,73,.3);">
+            ₹{{ redistribute_result.excess|indian_number }} over cap
+          </span>
+        </div>
+        <div class="card-body">
+          <p style="font-size:.85rem;color:var(--fin-muted);margin-bottom:1rem;">
+            {{ matched.slice }} currently holds
+            <strong style="color:var(--fin-danger);">₹{{ current.slice|indian_number }}</strong>,
+            which is ₹{{ redistribute_result.excess|indian_number }} above the
+            ₹{{ slice_cap|indian_int }} cap.
+            Move the excess in a 5&thinsp;:&thinsp;3&thinsp;:&thinsp;2 ratio (HDFC&nbsp;:&nbsp;IDFC&nbsp;:&nbsp;Union):
+          </p>
+
+          <table class="alloc-table" style="margin-bottom:1rem;">
+            <thead>
+              <tr>
+                <th>Account</th>
+                <th class="text-end">Transfer in</th>
+                <th class="text-end">Current balance</th>
+                <th class="text-end">New balance</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr class="slice-capped">
+                <td><div class="d-flex align-items-center gap-2">
+                  <span>💳</span>
+                  <div>
+                    <span style="font-weight:600;font-size:.88rem;">{{ matched.slice }}</span>
+                    <div style="font-size:.7rem;color:var(--fin-danger);">Move excess out</div>
+                  </div>
+                </div></td>
+                <td class="text-end" style="color:var(--fin-danger);font-weight:700;">−₹{{ redistribute_result.excess|indian_number }}</td>
+                <td class="text-end" style="font-size:.83rem;color:var(--fin-muted);">
+                  {% if current.slice is not None %}₹{{ current.slice|indian_number }}{% else %}—{% endif %}
+                </td>
+                <td class="text-end" style="font-weight:600;color:#4b9fff;">
+                  ₹{{ slice_cap|indian_int }}.00
+                </td>
+              </tr>
+              <tr class="hdfc-row">
+                <td><div class="d-flex align-items-center gap-2"><span>🏦</span>
+                  <span style="font-weight:600;font-size:.88rem;">{{ matched.hdfc }}</span>
+                </div></td>
+                <td class="text-end" style="color:var(--fin-primary);font-weight:700;">₹{{ redistribute_result.to_hdfc|indian_number }}</td>
+                <td class="text-end" style="font-size:.83rem;color:var(--fin-muted);">
+                  {% if current.hdfc is not None %}₹{{ current.hdfc|indian_number }}{% else %}—{% endif %}
+                </td>
+                <td class="text-end" style="font-weight:600;color:#4b9fff;">
+                  {% if redistribute_result.hdfc_new is not None %}₹{{ redistribute_result.hdfc_new|indian_number }}{% else %}—{% endif %}
+                </td>
+              </tr>
+              <tr>
+                <td><div class="d-flex align-items-center gap-2"><span>🏛</span>
+                  <span style="font-weight:600;font-size:.88rem;">{{ matched.idfc }}</span>
+                </div></td>
+                <td class="text-end" style="color:var(--fin-primary);font-weight:700;">₹{{ redistribute_result.to_idfc|indian_number }}</td>
+                <td class="text-end" style="font-size:.83rem;color:var(--fin-muted);">
+                  {% if current.idfc is not None %}₹{{ current.idfc|indian_number }}{% else %}—{% endif %}
+                </td>
+                <td class="text-end" style="font-weight:600;color:#4b9fff;">
+                  {% if redistribute_result.idfc_new is not None %}₹{{ redistribute_result.idfc_new|indian_number }}{% else %}—{% endif %}
+                </td>
+              </tr>
+              <tr>
+                <td><div class="d-flex align-items-center gap-2"><span>🏢</span>
+                  <span style="font-weight:600;font-size:.88rem;">{{ matched.union }}</span>
+                </div></td>
+                <td class="text-end" style="color:var(--fin-primary);font-weight:700;">₹{{ redistribute_result.to_union|indian_number }}</td>
+                <td class="text-end" style="font-size:.83rem;color:var(--fin-muted);">
+                  {% if current.union is not None %}₹{{ current.union|indian_number }}{% else %}—{% endif %}
+                </td>
+                <td class="text-end" style="font-weight:600;color:#4b9fff;">
+                  {% if redistribute_result.union_new is not None %}₹{{ redistribute_result.union_new|indian_number }}{% else %}—{% endif %}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+
+          <div style="font-size:.78rem;color:var(--fin-muted);">
+            <i class="bi bi-info-circle me-1"></i>
+            Source: {{ mmbak_name }} &mdash; balances computed from all transactions.
+            Enter an income amount above to combine redistribution with a salary split.
+          </div>
+        </div>
+      </div>
+    {% elif redistribute_result is not None and not redistribute_result.excess %}
+      {# redistribute=1 was passed but Slice is under cap #}
+      <div class="card mb-4">
+        <div class="card-header d-flex align-items-center gap-2">
+          <i class="bi bi-shuffle text-fin"></i> Redistribute Check
+        </div>
+        <div class="card-body text-center py-4">
+          <div style="font-size:2rem;margin-bottom:.75rem;">✅</div>
+          <div class="section-title mb-1">No redistribution needed</div>
+          <p style="font-size:.85rem;color:var(--fin-muted);">
+            {{ matched.slice }} balance
+            (₹{{ current.slice|indian_number }}) is within the
+            ₹{{ slice_cap|indian_int }} cap.
+          </p>
+        </div>
+      </div>
+    {% endif %}
+
+    {% if result %}
+
+    {# Cap banner (shown at top of results when triggered) #}
+    {% if result.cap_case == 'pre' %}
+      <div class="cap-banner mb-4">
+        <i class="bi bi-exclamation-triangle-fill"></i>
+        <span>
+          <strong style="color:var(--fin-danger);">Slice SFB over ₹{{ result.slice_cap_used|indian_int }} cap.</strong>
+          No new income allocated to Slice. Slice's income share
+          (₹{{ result.slice_income_overflow|indian_number }}) and the existing excess
+          (₹{{ result.slice_excess|indian_number }}) are redistributed to HDFC, IDFC and Union
+          in a 5&thinsp;:&thinsp;3&thinsp;:&thinsp;2 ratio.
+        </span>
+      </div>
+    {% elif result.cap_case == 'post' %}
+      <div class="cap-banner mb-4">
+        <i class="bi bi-exclamation-triangle-fill"></i>
+        <span>
+          <strong style="color:var(--fin-danger);">Slice SFB would exceed ₹{{ result.slice_cap_used|indian_int }} cap.</strong>
+          Slice receives only ₹{{ result.rows.0.alloc|indian_number }} (to reach exactly ₹{{ result.slice_cap_used|indian_int }}).
+          The overflow of ₹{{ result.slice_income_overflow|indian_number }} is redistributed to HDFC, IDFC and Union
+          in a 5&thinsp;:&thinsp;3&thinsp;:&thinsp;2 ratio.
+        </span>
+      </div>
+    {% endif %}
+
+    {# ── Step-by-step breakdown ────── #}
+    <div class="card mb-4">
+      <div class="card-header d-flex align-items-center gap-2">
+        <i class="bi bi-list-ol text-fin"></i> Calculation Breakdown
+      </div>
+      <div class="card-body">
+
+        <div class="step-row">
+          <div class="step-badge">1</div>
+          <div><div class="step-label">Income received</div>
+               <div class="step-value">₹{{ result.income|indian_number }}</div></div>
+        </div>
+
+        {% if result.ded1 > 0 %}
+        <div class="step-row">
+          <div class="step-badge">2</div>
+          <div>
+            <div class="step-label">Subtract fixed deduction 1 (₹{{ result.ded1|indian_number }})</div>
+            <div class="step-eq">₹{{ result.income|indian_number }} − ₹{{ result.ded1|indian_number }}</div>
+            <div class="step-value text-fin">= ₹{{ result.post_ded1|indian_number }}</div>
+          </div>
+        </div>
+        {% endif %}
+
+        {% if result.ded2 > 0 %}
+        <div class="step-row">
+          <div class="step-badge">{% if result.ded1 > 0 %}3{% else %}2{% endif %}</div>
+          <div>
+            <div class="step-label">Subtract fixed deduction 2 (₹{{ result.ded2|indian_number }})</div>
+            <div class="step-eq">₹{{ result.post_ded1|indian_number }} − ₹{{ result.ded2|indian_number }}</div>
+            <div class="step-value text-fin">Distributable = ₹{{ result.distributable|indian_number }}</div>
+          </div>
+        </div>
+        {% endif %}
+
+        {% if result.ded1 == 0 and result.ded2 == 0 %}
+        <div class="step-row">
+          <div class="step-badge">2</div>
+          <div><div class="step-label">No fixed deductions — full amount is distributable</div>
+               <div class="step-value text-fin">₹{{ result.distributable|indian_number }}</div></div>
+        </div>
+        {% endif %}
+
+        {# Allocation mini-pills #}
+        <div class="step-row">
+          <div class="step-badge">
+            {% if result.ded1 > 0 and result.ded2 > 0 %}4
+            {% elif result.ded1 > 0 or result.ded2 > 0 %}3
+            {% else %}3{% endif %}
+          </div>
+          <div style="width:100%;">
+            <div class="step-label mb-2">
+              Percentage split on distributable ₹{{ result.distributable|indian_number }}
+              {% if result.cap_case %}<span class="ms-1" style="color:var(--fin-danger);font-size:.74rem;">(cap applied)</span>{% endif %}
+            </div>
+            <div class="row g-2">
+              <div class="col-6 col-md-3">
+                <div class="alloc-mini {% if result.cap_case %}capped{% endif %}">
+                  <div class="am-label">Slice SFB</div>
+                  <div class="am-amt">₹{{ result.rows.0.alloc|indian_number }}</div>
+                  <div class="am-pct">{{ result.rows.0.pct }}</div>
+                </div>
+              </div>
+              <div class="col-6 col-md-3">
+                <div class="alloc-mini">
+                  <div class="am-label">IDFC First</div>
+                  <div class="am-amt">₹{{ result.rows.1.alloc|indian_number }}</div>
+                  <div class="am-pct">{{ result.rows.1.pct }}</div>
+                </div>
+              </div>
+              <div class="col-6 col-md-3">
+                <div class="alloc-mini">
+                  <div class="am-label">Union Bank</div>
+                  <div class="am-amt">₹{{ result.rows.2.alloc|indian_number }}</div>
+                  <div class="am-pct">{{ result.rows.2.pct }}</div>
+                </div>
+              </div>
+              <div class="col-6 col-md-3">
+                <div class="alloc-mini hdfc">
+                  <div class="am-label">HDFC (total)</div>
+                  <div class="am-amt">₹{{ result.rows.3.alloc|indian_number }}</div>
+                  <div class="am-pct">{{ result.rows.3.pct }}</div>
+                </div>
+              </div>
+            </div>
+
+            {# Cap overflow breakdown (inline, below pills) #}
+            {% if result.cap_case %}
+            <div class="mt-2 p-2 rounded" style="background:rgba(248,81,73,.07);
+                 border:1px solid rgba(248,81,73,.2);font-size:.78rem;color:var(--fin-muted);">
+              <i class="bi bi-arrow-right-square me-1" style="color:var(--fin-danger);"></i>
+              {% if result.cap_case == 'pre' %}
+                Overflow ₹{{ result.slice_income_overflow|indian_number }} (income share)
+                + ₹{{ result.slice_excess|indian_number }} (existing excess) →
+              {% else %}
+                Overflow ₹{{ result.slice_income_overflow|indian_number }} →
+              {% endif %}
+              HDFC ₹{{ result.hdfc_var|indian_number }} &nbsp;|&nbsp;
+              IDFC +overflow &nbsp;|&nbsp; Union +overflow
+              &nbsp;<span class="text-gold">(5:3:2)</span>
+            </div>
+            {% endif %}
+
+          </div>
+        </div>
+
+        {% if result.ded1 > 0 or result.ded2 > 0 %}
+        <div class="step-row">
+          <div class="step-badge">
+            {% if result.ded1 > 0 and result.ded2 > 0 %}5
+            {% else %}4{% endif %}
+          </div>
+          <div>
+            <div class="step-label">Add fixed deductions back to HDFC</div>
+            <div class="step-eq">
+              ₹{{ result.hdfc_var|indian_number }} (variable)
+              {% if result.ded1 > 0 %} + ₹{{ result.ded1|indian_number }}{% endif %}
+              {% if result.ded2 > 0 %} + ₹{{ result.ded2|indian_number }}{% endif %}
+            </div>
+            <div class="step-value text-fin">HDFC total = ₹{{ result.rows.3.alloc|indian_number }}</div>
+          </div>
+        </div>
+        {% endif %}
+
+      </div>
+    </div>
+
+    {# ── Allocation table ────────────── #}
+    <div class="card mb-4">
+      <div class="card-header d-flex align-items-center gap-2">
+        <i class="bi bi-table text-fin"></i>
+        Allocation &amp; New Balances
+        <span class="ms-auto badge"
+              style="background:rgba(0,200,150,.12);color:var(--fin-primary);
+                     border:1px solid rgba(0,200,150,.22);font-weight:600;">
+          Total ₹{{ result.income|indian_number }}
+        </span>
+      </div>
+      <div class="card-body" style="overflow-x:auto;">
+        <table class="alloc-table">
+          <thead>
+            <tr>
+              <th>Account</th>
+              <th class="text-center">Split</th>
+              <th class="text-end">Allocation</th>
+              <th class="text-end">Current balance</th>
+              <th class="text-end">New balance</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in result.rows %}
+            <tr class="{% if row.key == 'hdfc' %}hdfc-row{% elif row.key == 'slice' and result.cap_case %}slice-capped{% endif %}">
+              <td>
+                <div class="d-flex align-items-center gap-2">
+                  <span style="font-size:.95rem;">
+                    {% if row.key == 'hdfc' %}🏦{% elif row.key == 'idfc' %}🏛
+                    {% elif row.key == 'union' %}🏢{% else %}💳{% endif %}
+                  </span>
+                  <div>
+                    <span style="font-weight:600;font-size:.88rem;">{{ row.name }}</span>
+                    {% if row.key == 'slice' and result.cap_case %}
+                      <div style="font-size:.7rem;color:var(--fin-danger);">
+                        {% if result.cap_case == 'pre' %}Already over ₹{{ result.slice_cap_used|indian_int }} cap
+                        {% else %}Capped at ₹{{ result.slice_cap_used|indian_int }}{% endif %}
+                      </div>
+                    {% endif %}
+                  </div>
+                </div>
+              </td>
+              <td class="text-center" style="font-size:.8rem;color:var(--fin-gold);">{{ row.pct }}</td>
+              <td class="text-end" style="font-weight:700;color:var(--fin-primary);white-space:nowrap;">
+                {% if row.key == 'slice' and result.cap_case == 'pre' %}
+                  <span style="color:var(--fin-muted);">₹0.00</span>
+                {% else %}
+                  ₹{{ row.alloc|indian_number }}
+                {% endif %}
+              </td>
+              <td class="text-end" style="font-size:.83rem;color:var(--fin-muted);white-space:nowrap;">
+                {% if row.current is not None %}₹{{ row.current|indian_number }}{% else %}—{% endif %}
+              </td>
+              <td class="text-end" style="font-weight:600;white-space:nowrap;">
+                {% if row.new_bal is not None %}
+                  <span style="color:{% if row.new_bal >= 0 %}#4b9fff{% else %}var(--fin-danger){% endif %};">
+                    ₹{{ row.new_bal|indian_number }}
+                  </span>
+                {% else %}—{% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    {# ── What to do ────────────────── #}
+    <div class="card">
+      <div class="card-header d-flex align-items-center gap-2">
+        <i class="bi bi-send-check text-fin"></i>
+        What to Do
+        <span class="ms-auto" style="font-size:.8rem;color:var(--fin-muted);">
+          Total out of {{ result.landing_name }}:
+          <strong class="text-fin ms-1">₹{{ result.total_out|indian_number }}</strong>
+        </span>
+      </div>
+      <div class="card-body">
+
+        {# ── One row per account: keep for landing, transfer for others ── #}
+        {% for row in result.rows %}
+          {% if row.key == result.landing_key %}
+            {# ── Keep row (landing account) ── #}
+            {% if result.cap_case == 'pre' and row.key == 'slice' %}
+              <div class="d-flex align-items-center gap-2 mb-3 flex-wrap">
+                <span class="t-pill t-pill-warn">
+                  <i class="bi bi-x-circle"></i>
+                  Keep ₹0 in {{ row.name }} — already over ₹{{ result.slice_cap_used|indian_int }} cap
+                </span>
+              </div>
+            {% else %}
+              <div class="d-flex align-items-center gap-3 mb-3 flex-wrap">
+                <span class="t-pill t-pill-keep">
+                  <i class="bi bi-check2-circle"></i>
+                  Keep ₹{{ row.alloc|indian_number }} in {{ row.name }}
+                  {% if result.cap_case == 'post' and row.key == 'slice' %}
+                    <span style="font-size:.74rem;opacity:.8;">(capped at ₹{{ result.slice_cap_used|indian_int }})</span>
+                  {% endif %}
+                </span>
+                {% if row.new_bal is not None %}
+                  <span style="font-size:.82rem;color:var(--fin-muted);">
+                    New balance: <strong style="color:var(--fin-text);">₹{{ row.new_bal|indian_number }}</strong>
+                  </span>
+                {% endif %}
+              </div>
+            {% endif %}
+          {% endif %}
+        {% endfor %}
+
+        <hr style="border-color:var(--fin-border);margin:.25rem 0 .9rem;">
+
+        <div class="mb-2" style="font-size:.75rem;color:var(--fin-muted);text-transform:uppercase;letter-spacing:.6px;">
+          Transfer out of {{ result.landing_name }}
+        </div>
+
+        {% for row in result.rows %}
+          {% if row.key != result.landing_key %}
+            {# Slice with cap case 2: use income-only amount when Slice is landing-adjacent #}
+            {% if result.cap_case == 'pre' and row.key == 'hdfc' %}
+              {% with amt=result.hdfc_from_income %}
+              <div class="d-flex align-items-center gap-3 mb-2 flex-wrap">
+                <span class="t-pill t-pill-out">
+                  <i class="bi bi-arrow-right-circle"></i>
+                  ₹{{ amt|indian_number }} → {{ row.name }}
+                </span>
+              </div>
+              {% endwith %}
+            {% elif result.cap_case == 'pre' and row.key == 'idfc' %}
+              {% with amt=result.idfc_from_income %}
+              <div class="d-flex align-items-center gap-3 mb-2 flex-wrap">
+                <span class="t-pill t-pill-out">
+                  <i class="bi bi-arrow-right-circle"></i>
+                  ₹{{ amt|indian_number }} → {{ row.name }}
+                </span>
+              </div>
+              {% endwith %}
+            {% elif result.cap_case == 'pre' and row.key == 'union' %}
+              {% with amt=result.union_from_income %}
+              <div class="d-flex align-items-center gap-3 mb-2 flex-wrap">
+                <span class="t-pill t-pill-out">
+                  <i class="bi bi-arrow-right-circle"></i>
+                  ₹{{ amt|indian_number }} → {{ row.name }}
+                </span>
+              </div>
+              {% endwith %}
+            {% else %}
+              <div class="d-flex align-items-center gap-3 mb-2 flex-wrap">
+                <span class="t-pill t-pill-out">
+                  <i class="bi bi-arrow-right-circle"></i>
+                  ₹{{ row.alloc|indian_number }} → {{ row.name }}
+                </span>
+                {% if row.new_bal is not None and result.cap_case != 'pre' %}
+                  <span style="font-size:.82rem;color:var(--fin-muted);">
+                    New balance: <strong style="color:var(--fin-text);">₹{{ row.new_bal|indian_number }}</strong>
+                  </span>
+                {% endif %}
+              </div>
+            {% endif %}
+          {% endif %}
+        {% endfor %}
+
+        {# ── Case 2: also drain pre-existing Slice excess ── #}
+        {% if result.cap_case == 'pre' and result.slice_excess > 0 %}
+          <div class="from-slice-box">
+            <div class="fs-title">
+              <i class="bi bi-exclamation-triangle me-1"></i>
+              Also move pre-existing excess ₹{{ result.slice_excess|indian_number }} out of {{ result.rows.0.name }}
+            </div>
+            <div class="d-flex align-items-center gap-3 mb-2 flex-wrap">
+              <span class="t-pill t-pill-warn">
+                <i class="bi bi-arrow-right-circle"></i>
+                ₹{{ result.exc_hdfc|indian_number }} → {{ result.rows.3.name }}
+              </span>
+            </div>
+            <div class="d-flex align-items-center gap-3 mb-2 flex-wrap">
+              <span class="t-pill t-pill-warn">
+                <i class="bi bi-arrow-right-circle"></i>
+                ₹{{ result.exc_idfc|indian_number }} → {{ result.rows.1.name }}
+              </span>
+            </div>
+            <div class="d-flex align-items-center gap-3 flex-wrap">
+              <span class="t-pill t-pill-warn">
+                <i class="bi bi-arrow-right-circle"></i>
+                ₹{{ result.exc_union|indian_number }} → {{ result.rows.2.name }}
+              </span>
+            </div>
+          </div>
+          <div class="mt-3 pt-3 d-flex flex-wrap gap-3"
+               style="border-top:1px solid var(--fin-border);font-size:.82rem;color:var(--fin-muted);">
+            {% for row in result.rows %}
+              {% if row.new_bal is not None %}
+                <span>{{ row.name }}:
+                  <strong style="color:{% if row.key == 'slice' %}var(--fin-danger){% else %}var(--fin-text){% endif %};">
+                    ₹{{ row.new_bal|indian_number }}
+                  </strong>
+                </span>
+              {% endif %}
+            {% endfor %}
+          </div>
+        {% endif %}
+
+      </div>
+    </div>
+
+    {% else %}
+
+    {# Empty state (also shows the Case 4 overflow card separately) #}
+    {% if not slice_overflow_preview %}
+    <div class="d-flex flex-column align-items-center justify-content-center text-center"
+         style="min-height:380px;">
+      <div style="font-size:3.5rem;margin-bottom:1.25rem;
+                  filter:drop-shadow(0 0 18px rgba(0,200,150,.25));">💰</div>
+      <div class="section-title mb-2">Enter your income to get started</div>
+      <p style="font-size:.88rem;color:var(--fin-muted);max-width:430px;">
+        Type the salary or income amount that landed in HDFC Bank. The app will
+        compute how much to keep and how much to transfer to each account.
+      </p>
+    </div>
+    {% else %}
+    <div class="d-flex flex-column align-items-center justify-content-center text-center"
+         style="min-height:200px;">
+      <div style="font-size:2.5rem;margin-bottom:.75rem;">⚠️</div>
+      <div class="section-title mb-2">Slice SFB is over its ₹{{ slice_cap|indian_int }} cap</div>
+      <p style="font-size:.88rem;color:var(--fin-muted);max-width:430px;">
+        Move the excess shown on the left before entering income, or enter the
+        income amount and the app will handle both in one calculation.
+      </p>
+    </div>
+    {% endif %}
+
+    {% endif %}
+
+  </div>{# /right col #}
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  document.getElementById('splitter-form').addEventListener('submit', function () {
+    ['income-input', 'slice-cap-input'].forEach(function (id) {
+      const el = document.getElementById(id);
+      if (el) el.value = el.value.replace(/[,\s]/g, '');
+    });
+  });
+
+  // Live-update the cap preview in the rules box as the user types
+  const capInput   = document.getElementById('slice-cap-input');
+  const capPreview = document.getElementById('cap-preview');
+  if (capInput && capPreview) {
+    capInput.addEventListener('input', function () {
+      const v = parseFloat(this.value);
+      capPreview.textContent = isNaN(v) ? '—' : v.toLocaleString('en-IN', {maximumFractionDigits: 0});
+    });
+  }
+</script>
+{% endblock %}

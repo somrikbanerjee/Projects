@@ -171,6 +171,53 @@ def import_actuals_for_month(year: int, month: int) -> "MonthlyActual | None":
     return save_actuals_to_db(year, month, expenses, filepath)
 
 
+def get_all_account_balances(filepath: str) -> dict:
+    """
+    Compute current account balances from a Money Manager .mmbak SQLite backup.
+
+    Balances are derived from INOUTCOME transactions rather than a stored
+    balance field (Money Manager does not persist balances in ASSETS).
+
+    DO_TYPE semantics:
+      '0' = income        → +
+      '1' = expense       → −
+      '3' = transfer out  → − (assetUid is the source account)
+      '4' = transfer in   → + (assetUid is the destination account)
+      '7' = opening bal   → +
+
+    Returns {account_name: balance_float} for all accounts that appear in
+    ASSETS, or {} on any read error.
+    """
+    _BALANCE_SQL = """
+        SELECT
+            a.NIC_NAME,
+            ROUND(COALESCE(SUM(
+                CASE
+                    WHEN t.DO_TYPE IN ('0', '7') THEN  CAST(t.ZMONEY AS REAL)
+                    WHEN t.DO_TYPE = '1'         THEN -CAST(t.ZMONEY AS REAL)
+                    WHEN t.DO_TYPE = '4'         THEN  CAST(t.ZMONEY AS REAL)
+                    WHEN t.DO_TYPE = '3'         THEN -CAST(t.ZMONEY AS REAL)
+                    ELSE 0
+                END
+            ), 0), 2) AS balance
+        FROM ASSETS a
+        LEFT JOIN INOUTCOME t
+               ON t.assetUid = a.uid
+              AND t.IS_DEL   = 0
+        GROUP BY a.uid, a.NIC_NAME
+    """
+    try:
+        conn = sqlite3.connect(filepath)
+        cur  = conn.cursor()
+        cur.execute(_BALANCE_SQL)
+        rows = cur.fetchall()
+        conn.close()
+        return {str(name): float(bal) for name, bal in rows if name}
+    except Exception as exc:
+        logger.warning("Failed to compute account balances from %s: %s", filepath, exc)
+        return {}
+
+
 def get_available_months(filepath: str,
                          before_year: int, before_month: int) -> list:
     """
