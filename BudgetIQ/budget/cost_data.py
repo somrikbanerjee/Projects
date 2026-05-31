@@ -11,10 +11,17 @@ Data is cached in the CostSnapshot model and refreshed at most once per month pe
 
 import datetime
 import logging
+import threading
 
 import requests
 
 logger = logging.getLogger(__name__)
+
+# ── Background-refresh deduplication ─────────────────────────────────────────
+# Tracks (year, month, city) keys currently being refreshed so we never
+# spawn more than one thread for the same snapshot.
+_refresh_in_progress: set = set()
+_refresh_lock = threading.Lock()
 
 WORLD_BANK_CPI_URL = (
     "https://api.worldbank.org/v2/country/IN/indicator/FP.CPI.TOTL"
@@ -184,7 +191,7 @@ def resolve_city_from_coords(lat: float, lon: float) -> str:
             NOMINATIM_REVERSE_URL,
             params={"format": "json", "lat": lat, "lon": lon, "zoom": 10},
             headers={"User-Agent": "BudgetIQ/1.0 (somrik.banerjee@gmail.com)"},
-            timeout=8,
+            timeout=3,
         )
         resp.raise_for_status()
         data = resp.json()
@@ -226,7 +233,7 @@ def resolve_city_from_coords(lat: float, lon: float) -> str:
 def _fetch_world_bank_inflation():
     """Return (cpi_value, inflation_pct) from World Bank API or (None, None) on error."""
     try:
-        resp = requests.get(WORLD_BANK_INFLATION_URL, timeout=8)
+        resp = requests.get(WORLD_BANK_INFLATION_URL, timeout=3)
         resp.raise_for_status()
         data = resp.json()
         entries = data[1] if len(data) > 1 else []
@@ -241,7 +248,7 @@ def _fetch_world_bank_inflation():
 def _fetch_world_bank_cpi():
     """Return latest India CPI value or None."""
     try:
-        resp = requests.get(WORLD_BANK_CPI_URL, timeout=8)
+        resp = requests.get(WORLD_BANK_CPI_URL, timeout=3)
         resp.raise_for_status()
         data = resp.json()
         entries = data[1] if len(data) > 1 else []
@@ -294,38 +301,107 @@ def fetch_live_cost_data(year: int, month: int, city: str = "Hyderabad") -> dict
     return raw
 
 
+def _persist_snapshot(data: dict, year: int, month: int, city: str):
+    """Upsert a CostSnapshot row. Safe to call from any thread."""
+    from budget.models import CostSnapshot
+    snap, _ = CostSnapshot.objects.update_or_create(
+        year=year, month=month, location=city,
+        defaults=dict(
+            india_cpi=data.get("india_cpi"),
+            india_inflation_pct=data.get("india_inflation_pct"),
+            petrol_price_hyd=data.get("petrol_price_hyd"),
+            rent_index=data.get("rent_index"),
+            groceries_index=data.get("groceries_index"),
+            restaurant_index=data.get("restaurant_index"),
+            fetch_error=data.get("fetch_error", ""),
+            raw_data=data,
+        ),
+    )
+    return snap
+
+
+def _background_refresh(year: int, month: int, city: str) -> None:
+    """Fetch live World Bank data and persist it; runs in a daemon thread."""
+    key = (year, month, city)
+    with _refresh_lock:
+        if key in _refresh_in_progress:
+            return
+        _refresh_in_progress.add(key)
+    try:
+        data = fetch_live_cost_data(year, month, city)
+        _persist_snapshot(data, year, month, city)
+        logger.debug("Background cost refresh done for %s %04d-%02d", city, year, month)
+    except Exception as exc:
+        logger.warning("Background cost refresh failed: %s", exc)
+    finally:
+        with _refresh_lock:
+            _refresh_in_progress.discard(key)
+        # Release the thread-local DB connection so SQLite doesn't leak FDs.
+        try:
+            from django.db import connection
+            connection.close()
+        except Exception:
+            pass
+
+
+def _spawn_refresh(year: int, month: int, city: str) -> None:
+    t = threading.Thread(target=_background_refresh, args=(year, month, city), daemon=True)
+    t.start()
+
+
+def _baseline_snapshot(year: int, month: int, city: str):
+    """Return an *unsaved* CostSnapshot built from static city baselines (zero latency)."""
+    from budget.models import CostSnapshot
+    b = get_baseline(city)
+    return CostSnapshot(
+        year=year, month=month, location=city,
+        india_cpi=b.get("india_cpi"),
+        india_inflation_pct=b.get("india_inflation_pct"),
+        petrol_price_hyd=b.get("petrol_base_2024"),
+        rent_index=b.get("rent_index"),
+        groceries_index=b.get("groceries_index"),
+        restaurant_index=b.get("restaurant_index"),
+        fetch_error="baseline_pending_refresh",
+        raw_data=b,
+    )
+
+
 def get_or_fetch_cost_snapshot(year: int, month: int, city: str = "Hyderabad", force: bool = False):
     """
-    Return a CostSnapshot for the given month and city, fetching if not yet cached.
-    Pass force=True to delete the cached snapshot and re-fetch live data.
+    Return a CostSnapshot for (year, month, city) — always fast.
+
+    Strategy
+    --------
+    1. Exact cache hit (and not force)  → return immediately, no network.
+    2. Cache miss or force              → invalidate exact row if force;
+                                          spawn background thread to fetch live data;
+                                          return the most recent stale snapshot for
+                                          this city, or a static-baseline snapshot
+                                          if none exists yet.
+
+    The background thread persists the fresh data via update_or_create, so the
+    next page load automatically gets the real figures.
     """
     from budget.models import CostSnapshot
 
-    if force:
-        CostSnapshot.objects.filter(year=year, month=month, location=city).delete()
-    else:
+    if not force:
         try:
             return CostSnapshot.objects.get(year=year, month=month, location=city)
         except CostSnapshot.DoesNotExist:
             pass
+    else:
+        CostSnapshot.objects.filter(year=year, month=month, location=city).delete()
 
-    data = fetch_live_cost_data(year, month, city)
+    # Kick off a background refresh (deduplicated).
+    _spawn_refresh(year, month, city)
 
-    snap = CostSnapshot(
-        year=year,
-        month=month,
-        location=city,
-        india_cpi=data.get("india_cpi"),
-        india_inflation_pct=data.get("india_inflation_pct"),
-        petrol_price_hyd=data.get("petrol_price_hyd"),
-        rent_index=data.get("rent_index"),
-        groceries_index=data.get("groceries_index"),
-        restaurant_index=data.get("restaurant_index"),
-        fetch_error=data.get("fetch_error", ""),
-        raw_data=data,
-    )
-    snap.save()
-    return snap
+    # Serve the most recent stale snapshot for this city while the refresh runs.
+    stale = (CostSnapshot.objects
+             .filter(location=city)
+             .exclude(year=year, month=month)
+             .order_by('-year', '-month')
+             .first())
+    return stale if stale is not None else _baseline_snapshot(year, month, city)
 
 
 def cost_snapshot_to_adjustments(snap, city: str = "Hyderabad") -> dict:

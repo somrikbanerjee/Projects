@@ -9,6 +9,31 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [1.0.5] — 2026-05-31
+
+### Added
+
+- **Income Splitter tab** — new page (`/income-splitter/`) accessible from the main nav. Enter an income amount, choose which account it lands in, configure per-bank balance caps, and the app calculates how much to keep and how much to transfer to each account.
+
+  - **Split rules**: fixed deductions (₹28,168 + ₹38,500, applied in order if the income covers them) are routed to HDFC; the remainder distributes 10 % Slice SFB / 20 % IDFC First / 20 % Union Bank / 50 % HDFC.
+  - **Landing account selector** — income can land in any of the four banks; the "keep" instruction follows accordingly.
+  - **Per-bank balance caps** — all four banks have configurable caps (defaults: HDFC 50 L, IDFC 20 L, Union 20 L, Slice 2 L) with a "No cap" checkbox per row. Caps are enforced after the percentage split: if a bank would exceed its cap, the overflow is redistributed to remaining banks weighted by base allocation (HDFC ≫ IDFC = Union ≫ Slice), giving the user-described ratios — e.g. HDFC + Slice capped → 50 : 50 IDFC : Union; IDFC + Slice capped → ~71 : 29 HDFC : Union.
+  - **Pre-existing cap excess** — if a bank's current balance already exceeds its cap (read from the latest `.mmbak`), the excess is moved out and redistributed via the same weighted scheme. Handled automatically in both the income calculation and the dedicated Redistribute button.
+  - **Redistribute Excess button** — POST action that reads the current cap configuration and shows a standalone "Cap Excess Redistribution" table without needing any income amount. Displays move-out amounts, received amounts, new balances, and a liquid-fund recommendation if all caps are simultaneously met.
+  - **Liquid fund recommendation** — when all four caps are simultaneously met by the allocation, any unplaceable excess is displayed in a gold "invest in liquid fund" callout.
+  - **Account balances from mmbak** — `get_all_account_balances()` added to `mmbak_importer.py`; computes each account's running balance from `INOUTCOME` transactions (`DO_TYPE` 0/7 income, 1 expense, 3 transfer-out, 4 transfer-in) joined to `ASSETS` by `assetUid`. The latest `.mmbak` is used automatically.
+  - **Calculation breakdown card** — step-by-step display of deductions, distributable amount, percentage pills, and cap events.
+  - **Allocation & New Balances table** — per-bank columns for cap, income allocation, current balance, and projected new balance. Rows colour-coded: green for HDFC, red for capped banks.
+  - **Indian number formatting** throughout — all amounts in the Income Splitter use the existing `indian_number` / `indian_int` template filters.
+  - **Bank logos** — Clearbit Logo API with branded coloured-initial fallback badges (HDFC blue, IDFC purple, Union red, Slice magenta) rendered via a JS `onerror` handler.
+  - **Reset button** — clears form and results; appears once a calculation has been shown.
+
+### Fixed
+
+- **Weighted redistribution rounding drift** — `_weighted_redistribute` now gives the last absorber the exact arithmetic remainder (`pool − Σ others`) instead of an independently rounded share, guaranteeing that the sum of redistributed amounts always equals the source pool to the paisa.
+
+---
+
 ## [1.0.4] — 2026-05-30
 
 ### Fixed

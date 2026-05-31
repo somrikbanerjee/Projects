@@ -537,7 +537,35 @@ _SPLITTER_ACCOUNT_KEYS = {
 
 _INCOME_FIXED_DED_1 = 28_168
 _INCOME_FIXED_DED_2 = 38_500
-_SLICE_CAP          = 200_000.0   # Slice SFB balance ceiling
+
+# Bank logos via Clearbit Logo API (returns square PNGs, works well for Indian banks).
+# onerror fallback in the template renders a branded coloured badge.
+_BANK_LOGOS = {
+    'hdfc':  'https://logo.clearbit.com/hdfcbank.com',
+    'idfc':  'https://logo.clearbit.com/idfcfirstbank.com',
+    'union': 'https://logo.clearbit.com/unionbankofindia.co.in',
+    'slice': 'https://logo.clearbit.com/sliceit.com',
+}
+
+# Default caps per account (user can override in the form)
+_DEFAULT_CAPS = {
+    'hdfc':  50_00_000.0,   # 50 L
+    'idfc':  20_00_000.0,   # 20 L
+    'union': 20_00_000.0,   # 20 L
+    'slice':  2_00_000.0,   #  2 L
+}
+
+# Redistribution weights (proportional to base allocation share).
+# When overflow is redistributed to uncapped banks, amounts are split in
+# proportion to these weights so that HDFC (primary) absorbs the most, then
+# IDFC/Union (secondary, equal), then Slice (tertiary).
+# This naturally gives: HDFC+Slice capped → 50:50 IDFC:Union;
+#                        IDFC+Slice capped → ~71:29 HDFC:Union;
+#                        IDFC+Union capped → ~83:17 HDFC:Slice.
+_BASE_WEIGHTS = {'hdfc': 0.50, 'idfc': 0.20, 'union': 0.20, 'slice': 0.10}
+
+# Display order used throughout
+_ACCOUNT_ORDER = ['slice', 'idfc', 'union', 'hdfc']
 
 
 def _match_account(target: str, all_balances: dict):
@@ -554,20 +582,192 @@ def _match_account(target: str, all_balances: dict):
     return None, target
 
 
-def _split_5_3_2(amount: float):
-    """Split `amount` in HDFC:IDFC:Union = 5:3:2 (50 % : 30 % : 20 %).
-    Returns (to_hdfc, to_idfc, to_union) — remainder goes to HDFC."""
-    to_idfc  = round(amount * 0.30, 2)
-    to_union = round(amount * 0.20, 2)
-    to_hdfc  = round(amount - to_idfc - to_union, 2)
-    return to_hdfc, to_idfc, to_union
+def _weighted_redistribute(pool: float, absorbers: list) -> dict:
+    """
+    Distribute `pool` among `absorbers` proportionally by _BASE_WEIGHTS,
+    respecting each absorber's capacity ceiling.
+
+    absorbers: [(key, max_additional_capacity), ...]   capacity=inf means no cap.
+    Returns {key: amount_assigned}.
+
+    The last absorber in each iteration receives the exact remainder so the
+    sum of assigned values always equals pool (no rounding drift).
+    """
+    remaining = round(pool, 2)
+    avail = list(absorbers)
+    assigned = {}
+
+    for _ in range(20):
+        if remaining < 0.005 or not avail:
+            break
+        total_w = sum(_BASE_WEIGHTS.get(k, 0.1) for k, _ in avail)
+        new_avail = []
+        new_remaining = 0.0
+        so_far = 0.0
+        n = len(avail)
+
+        for i, (key, cap) in enumerate(avail):
+            if i < n - 1:
+                share = round(remaining * _BASE_WEIGHTS.get(key, 0.1) / total_w, 2)
+            else:
+                # Last absorber gets the exact remainder — prevents rounding drift.
+                share = round(remaining - so_far, 2)
+
+            actual = min(share, cap) if cap != float('inf') else share
+            actual = round(actual, 2)
+            assigned[key] = round(assigned.get(key, 0) + actual, 2)
+            so_far += actual
+
+            leftover = round(share - actual, 2)
+            if leftover > 0.005:
+                new_remaining += leftover
+            elif cap != float('inf') and cap - actual > 0.005:
+                new_avail.append((key, round(cap - actual, 2)))
+
+        avail = new_avail
+        remaining = round(new_remaining, 2)
+
+    return assigned
+
+
+def _apply_income_caps(base_alloc: dict, current: dict, caps: dict):
+    """
+    Apply per-bank caps to income allocations.
+    Overflow is redistributed by _BASE_WEIGHTS among banks with remaining capacity.
+
+    Returns:
+      alloc       – final per-bank income allocations
+      liquid      – amount that could not be placed (all caps met)
+      capped      – {key: overflow_amount} for banks whose cap was hit
+    """
+    alloc = dict(base_alloc)
+    pool = 0.0
+    capped = {}
+
+    for key, cap in caps.items():
+        if cap is None:
+            continue
+        cur = current.get(key) or 0
+        alloc_k = alloc.get(key, 0)
+        capacity = max(0.0, cap - cur)
+        if alloc_k > capacity + 0.005:
+            overflow = round(alloc_k - capacity, 2)
+            pool += overflow
+            alloc[key] = round(capacity, 2)
+            capped[key] = overflow
+
+    pool = round(pool, 2)
+    liquid = 0.0
+
+    for _ in range(20):
+        if pool < 0.005:
+            break
+        absorbers = []
+        for key in _ACCOUNT_ORDER:
+            cap = caps.get(key)
+            cur = current.get(key) or 0
+            new_bal = cur + alloc.get(key, 0)
+            if cap is None:
+                absorbers.append((key, float('inf')))
+            elif new_bal < cap - 0.005:
+                absorbers.append((key, round(cap - new_bal, 2)))
+        if not absorbers:
+            liquid = round(pool, 2)
+            pool = 0
+            break
+        added = _weighted_redistribute(pool, absorbers)
+        new_pool = pool - sum(added.values())
+        for key, amt in added.items():
+            alloc[key] = round(alloc.get(key, 0) + amt, 2)
+        pool = round(max(0, new_pool), 2)
+
+    return alloc, round(liquid, 2), capped
+
+
+def _compute_pre_excess(current: dict, caps: dict):
+    """
+    Find pre-existing excess (current balance > cap) and redistribute by _BASE_WEIGHTS.
+
+    Returns:
+      excess_out  – {key: amount to move OUT of this account}
+      received    – {key: amount received from redistribution}
+      liquid      – amount that couldn't be placed (all other caps met)
+    """
+    excess_out = {}
+    pool = 0.0
+    for key, cap in caps.items():
+        if cap is None:
+            continue
+        cur = current.get(key) or 0
+        if cur > cap + 0.005:
+            exc = round(cur - cap, 2)
+            excess_out[key] = exc
+            pool += exc
+
+    pool = round(pool, 2)
+    if pool < 0.005:
+        return {}, {}, 0.0
+
+    received = {}
+    liquid = 0.0
+
+    for _ in range(20):
+        if pool < 0.005:
+            break
+        absorbers = []
+        for key in _ACCOUNT_ORDER:
+            if key in excess_out:
+                continue
+            cap = caps.get(key)
+            cur = current.get(key) or 0
+            cur_recv = received.get(key, 0)
+            if cap is None:
+                absorbers.append((key, float('inf')))
+            elif cur + cur_recv < cap - 0.005:
+                absorbers.append((key, round(cap - cur - cur_recv, 2)))
+        if not absorbers:
+            liquid = round(pool, 2)
+            pool = 0
+            break
+        added = _weighted_redistribute(pool, absorbers)
+        new_pool = pool - sum(added.values())
+        for key, amt in added.items():
+            received[key] = round(received.get(key, 0) + amt, 2)
+        pool = round(max(0, new_pool), 2)
+
+    return excess_out, {k: v for k, v in received.items() if v > 0.005}, round(liquid, 2)
+
+
+def _read_caps_from_post(post) -> dict:
+    """Parse per-bank caps from POST data. Returns {key: float_or_None}."""
+    caps = {}
+    for key, default in _DEFAULT_CAPS.items():
+        nocap = bool(post.get(f'nocap_{key}'))
+        if nocap:
+            caps[key] = None
+        else:
+            raw = post.get(f'cap_{key}', '').replace(',', '').strip()
+            try:
+                val = round(float(raw), 2) if raw else default
+                caps[key] = max(0.0, val)
+            except ValueError:
+                caps[key] = default
+    return caps
+
+
+def _caps_to_form(caps: dict) -> dict:
+    """Convert caps dict to {key: {value, nocap}} for template rendering."""
+    return {
+        key: {'value': caps.get(key), 'nocap': caps.get(key) is None}
+        for key in _DEFAULT_CAPS
+    }
 
 
 def income_splitter(request):
     filepath     = find_latest_mmbak()
     mmbak_name   = os.path.basename(filepath) if filepath else None
     all_balances = get_all_account_balances(filepath) if filepath else {}
-    mmbak_error  = None if filepath else "No .mmbak backup file found in the MoneyManager folder."
+    mmbak_error  = None if filepath else "No .mmbak backup file found."
 
     current = {}
     matched = {}
@@ -576,219 +776,196 @@ def income_splitter(request):
         current[key] = bal
         matched[key] = name
 
-    slice_cur = current.get('slice')
+    # Default caps (used for GET-state previews)
+    default_caps = dict(_DEFAULT_CAPS)
 
-    # Slice overflow check — computed on every load so REDISTRIBUTE is always fresh.
-    # Also exposed as a standalone result when ?redistribute=1 is passed.
-    slice_overflow_preview = None
-    if slice_cur is not None and slice_cur > _SLICE_CAP:
-        excess = round(slice_cur - _SLICE_CAP, 2)
-        p_hdfc, p_idfc, p_union = _split_5_3_2(excess)
-        slice_overflow_preview = {
-            'excess':   excess,
-            'to_hdfc':  p_hdfc,
-            'to_idfc':  p_idfc,
-            'to_union': p_union,
+    # ── Pre-existing overflow preview (shown in left panel on load) ─────────
+    exc_preview_out, exc_preview_recv, exc_preview_liq = _compute_pre_excess(
+        {k: v for k, v in current.items() if v is not None}, default_caps
+    )
+    overflow_preview = None
+    if exc_preview_out:
+        rows_preview = []
+        for key in _ACCOUNT_ORDER:
+            cap = default_caps.get(key)
+            cur = current.get(key)
+            out = exc_preview_out.get(key, 0)
+            recv = exc_preview_recv.get(key, 0)
+            if out > 0 or recv > 0.005:
+                rows_preview.append({
+                    'key': key, 'name': matched[key],
+                    'out': out, 'recv': recv,
+                    'new_bal': round(cur - out + recv, 2) if cur is not None else None,
+                    'cap': cap,
+                })
+        overflow_preview = {
+            'rows': rows_preview,
+            'liquid': exc_preview_liq,
         }
 
-    # Standalone redistribute mode — show overflow result on the right panel
-    redistribute_result = None
-    if request.method == 'GET' and request.GET.get('redistribute'):
-        if slice_overflow_preview:
-            # Enrich with new balances for each account
-            rdist = dict(slice_overflow_preview)
-            rdist['slice_new']  = round(_SLICE_CAP, 2)
-            rdist['hdfc_new']   = (round(current['hdfc'] + rdist['to_hdfc'], 2)
-                                   if current['hdfc'] is not None else None)
-            rdist['idfc_new']   = (round(current['idfc'] + rdist['to_idfc'], 2)
-                                   if current['idfc'] is not None else None)
-            rdist['union_new']  = (round(current['union'] + rdist['to_union'], 2)
-                                   if current['union'] is not None else None)
-            redistribute_result = rdist
-        else:
-            redistribute_result = {}   # empty dict = "nothing to redistribute" sentinel
-
     result            = None
+    redistribute_only = None   # result for "Redistribute" button (no income)
     income_input      = None
+    landing_key       = 'slice'
     error             = None
-    landing_key       = 'slice'      # default; updated from POST below
-    slice_cap_form    = _SLICE_CAP   # value shown in the form input; updated from POST
+    caps_form         = _caps_to_form(default_caps)   # pre-fill form with defaults
 
     if request.method == 'POST':
-        try:
-            raw = request.POST.get('income', '').replace(',', '').strip()
-            income_input = float(raw)
-            landing_key  = request.POST.get('landing_account', 'slice')
-            if landing_key not in _SPLITTER_ACCOUNT_KEYS:
-                landing_key = 'slice'
+        caps_used = _read_caps_from_post(request.POST)
+        caps_form = _caps_to_form(caps_used)
+        action    = request.POST.get('action', 'calculate')
 
-            # User-configurable Slice cap (default 2 L)
-            cap_raw = request.POST.get('slice_cap_input', '').replace(',', '').strip()
-            try:
-                slice_cap_used = round(float(cap_raw), 2) if cap_raw else _SLICE_CAP
-                if slice_cap_used < 0:
-                    slice_cap_used = _SLICE_CAP
-            except ValueError:
-                slice_cap_used = _SLICE_CAP
-            slice_cap_form = slice_cap_used   # persist in form for re-render
-
-            if income_input <= 0:
-                raise ValueError("Income must be a positive amount.")
-
-            X    = income_input
-            ded1 = 0.0
-            ded2 = 0.0
-            if X >= _INCOME_FIXED_DED_1:
-                ded1 = float(_INCOME_FIXED_DED_1); X -= ded1
-            if X >= _INCOME_FIXED_DED_2:
-                ded2 = float(_INCOME_FIXED_DED_2); X -= ded2
-
-            distributable = round(X, 2)
-            post_ded1     = round(income_input - ded1, 2)
-
-            # ── Base income allocations (before any cap adjustment) ──────
-            slice_normal = round(distributable * 0.10, 2)
-            idfc_base    = round(distributable * 0.20, 2)
-            union_base   = round(distributable * 0.20, 2)
-
-            cap_case              = None
-            slice_alloc           = slice_normal
-            slice_income_overflow = 0.0   # Slice's income share redirected to others
-            slice_excess          = 0.0   # Pre-existing Slice excess to move out (Case 2)
-
-            if slice_cur is not None:
-                if slice_cur >= slice_cap_used:
-                    # Case 2: Slice already over cap — give it nothing, move excess out
-                    cap_case              = 'pre'
-                    slice_alloc           = 0.0
-                    slice_income_overflow = slice_normal
-                    slice_excess          = round(slice_cur - slice_cap_used, 2)
-                elif round(slice_cur + slice_normal, 2) > slice_cap_used:
-                    # Case 3: Top Slice up to exactly the cap, redirect the rest
-                    cap_case              = 'post'
-                    slice_alloc           = round(slice_cap_used - slice_cur, 2)
-                    slice_income_overflow = round(slice_normal - slice_alloc, 2)
-
-            # ── Redistribute Slice's income overflow (5:3:2 → HDFC:IDFC:Union) ──
-            inc_ov_hdfc, inc_ov_idfc, inc_ov_union = _split_5_3_2(slice_income_overflow)
-
-            idfc_income  = round(idfc_base + inc_ov_idfc,  2)
-            union_income = round(union_base + inc_ov_union, 2)
-            hdfc_var_inc = round(distributable - slice_alloc - idfc_income - union_income, 2)
-
-            # ── Redistribute pre-existing Slice excess (Case 2, 5:3:2) ──────────
-            exc_hdfc, exc_idfc, exc_union = _split_5_3_2(slice_excess)
-
-            # ── Final combined allocations ───────────────────────────────────────
-            idfc_alloc  = round(idfc_income  + exc_idfc,  2)
-            union_alloc = round(union_income + exc_union, 2)
-            hdfc_var    = round(hdfc_var_inc + exc_hdfc,  2)
-            hdfc_alloc  = round(hdfc_var + ded1 + ded2,   2)
-
-            # ── New balances ─────────────────────────────────────────────────────
-            # mmbak balances are pre-income; new balance = current + allocation for all accounts.
-            def _new_bal(cur_bal, alloc):
-                return round(cur_bal + alloc, 2) if cur_bal is not None else None
-
-            # Slice new balance caps at the user-set cap when either cap case fires
-            if cap_case and slice_cur is not None:
-                slice_new_bal = round(slice_cap_used, 2)
-            else:
-                slice_new_bal = _new_bal(slice_cur, slice_alloc)
-
-            # pct label for the allocation table
-            if cap_case == 'pre':
-                slice_pct = '0 % (over cap)'
-            elif cap_case == 'post':
-                p = round(slice_alloc / distributable * 100, 1) if distributable else 0
-                slice_pct = f'{p} % (capped)'
-            else:
-                slice_pct = '10 %'
-
-            result = {
-                'income':        income_input,
-                'ded1':          ded1,
-                'ded2':          ded2,
-                'post_ded1':     post_ded1,
-                'distributable': distributable,
-                'hdfc_var':      hdfc_var,
-                'rows': [
-                    {
-                        'key':     'slice',
-                        'name':    matched['slice'],
-                        'pct':     slice_pct,
-                        'alloc':   slice_alloc,
-                        'current': slice_cur,
-                        'new_bal': slice_new_bal,
-                    },
-                    {
-                        'key':     'idfc',
-                        'name':    matched['idfc'],
-                        'pct':     '20 %' if not cap_case else '20 % + overflow',
-                        'alloc':   idfc_alloc,
-                        'current': current['idfc'],
-                        'new_bal': _new_bal(current['idfc'], idfc_alloc),
-                    },
-                    {
-                        'key':     'union',
-                        'name':    matched['union'],
-                        'pct':     '20 %' if not cap_case else '20 % + overflow',
-                        'alloc':   union_alloc,
-                        'current': current['union'],
-                        'new_bal': _new_bal(current['union'], union_alloc),
-                    },
-                    {
-                        'key':     'hdfc',
-                        'name':    matched['hdfc'],
-                        'pct':     'Remainder',
-                        'alloc':   hdfc_alloc,
-                        'current': current['hdfc'],
-                        'new_bal': _new_bal(current['hdfc'], hdfc_alloc),
-                    },
-                ],
-                # Total leaving the landing account
-                'landing_key':  landing_key,
-                'landing_name': matched[landing_key],
-                'total_out': round(
-                    sum(a for k, a in [
-                        ('slice', slice_alloc), ('idfc', idfc_alloc),
-                        ('union', union_alloc), ('hdfc', hdfc_alloc),
-                    ] if k != landing_key),
-                    2,
-                ),
-                # Cap meta — used by the template for "What to do" section
-                'cap_case':              cap_case,
-                'slice_cap_used':        slice_cap_used,
-                'slice_income_overflow': slice_income_overflow,
-                'slice_excess':          slice_excess,
-                'exc_hdfc':              exc_hdfc,
-                'exc_idfc':              exc_idfc,
-                'exc_union':             exc_union,
-                # Income-only amounts (needed to break down Case 2 "What to do")
-                'idfc_from_income':   idfc_income,
-                'union_from_income':  union_income,
-                'hdfc_from_income':   round(hdfc_var_inc + ded1 + ded2, 2),
+        if action == 'redistribute':
+            # ── Redistribute only (no income) ────────────────────────────
+            cur_known = {k: v for k, v in current.items() if v is not None}
+            exc_out, exc_recv, exc_liq = _compute_pre_excess(cur_known, caps_used)
+            rows_r = []
+            for key in _ACCOUNT_ORDER:
+                cur = current.get(key)
+                cap = caps_used.get(key)
+                out  = exc_out.get(key, 0)
+                recv = exc_recv.get(key, 0)
+                rows_r.append({
+                    'key':     key,
+                    'name':    matched[key],
+                    'cap':     cap,
+                    'current': cur,
+                    'out':     out,
+                    'recv':    recv,
+                    'new_bal': (round(cur - out + recv, 2) if cur is not None else None),
+                })
+            redistribute_only = {
+                'rows':   rows_r,
+                'liquid': exc_liq,
+                'any':    bool(exc_out),
             }
 
-        except (ValueError, TypeError) as exc:
-            error = str(exc)
+        else:
+            # ── Full income calculation ───────────────────────────────────
+            try:
+                raw = request.POST.get('income', '').replace(',', '').strip()
+                income_input = float(raw)
+                if income_input <= 0:
+                    raise ValueError("Income must be a positive amount.")
+
+                landing_key = request.POST.get('landing_account', 'slice')
+                if landing_key not in _SPLITTER_ACCOUNT_KEYS:
+                    landing_key = 'slice'
+
+                X    = income_input
+                ded1 = 0.0
+                ded2 = 0.0
+                if X >= _INCOME_FIXED_DED_1:
+                    ded1 = float(_INCOME_FIXED_DED_1); X -= ded1
+                if X >= _INCOME_FIXED_DED_2:
+                    ded2 = float(_INCOME_FIXED_DED_2); X -= ded2
+
+                distributable = round(X, 2)
+                post_ded1     = round(income_input - ded1, 2)
+
+                # Base allocations (10 / 20 / 20 / 50%)
+                base = {
+                    'slice': round(distributable * 0.10, 2),
+                    'idfc':  round(distributable * 0.20, 2),
+                    'union': round(distributable * 0.20, 2),
+                }
+                base['hdfc'] = round(income_input - base['slice'] - base['idfc'] - base['union'], 2)
+
+                # Apply caps to income allocations
+                cur_known = {k: (v or 0) for k, v in current.items()}
+                income_alloc, income_liq, capped_by_income = _apply_income_caps(
+                    base, cur_known, caps_used
+                )
+
+                # Pre-existing excess redistribution (independent of income)
+                pre_exc_out, pre_exc_recv, pre_exc_liq = _compute_pre_excess(
+                    cur_known, caps_used
+                )
+
+                total_liquid = round(income_liq + pre_exc_liq, 2)
+
+                # Build per-bank rows
+                base_pct = {'slice': '10 %', 'idfc': '20 %', 'union': '20 %', 'hdfc': 'Rem.'}
+                rows = []
+                for key in _ACCOUNT_ORDER:
+                    alloc    = income_alloc.get(key, 0)
+                    cur      = current.get(key)
+                    cap      = caps_used.get(key)
+                    capped   = key in capped_by_income
+                    pre_out  = pre_exc_out.get(key, 0)
+                    pre_recv = pre_exc_recv.get(key, 0)
+
+                    if capped:
+                        pv = round(alloc / distributable * 100, 1) if distributable else 0
+                        pct_label = f'{pv} % (capped)' if alloc > 0.005 else '0 % (capped)'
+                    else:
+                        pct_label = base_pct[key]
+
+                    new_bal = (
+                        round(cur + alloc + pre_recv - pre_out, 2)
+                        if cur is not None else None
+                    )
+
+                    rows.append({
+                        'key':      key,
+                        'name':     matched[key],
+                        'pct':      pct_label,
+                        'alloc':    alloc,
+                        'current':  cur,
+                        'cap':      cap,
+                        'capped':   capped,
+                        'pre_out':  pre_out,
+                        'pre_recv': pre_recv,
+                        'new_bal':  new_bal,
+                    })
+
+                alloc_map = {r['key']: r['alloc'] for r in rows}
+                total_out = round(
+                    sum(v for k, v in alloc_map.items() if k != landing_key), 2
+                )
+
+                result = {
+                    'income':        income_input,
+                    'ded1':          ded1,
+                    'ded2':          ded2,
+                    'post_ded1':     post_ded1,
+                    'distributable': distributable,
+                    'hdfc_var':      round(base['hdfc'] - ded1 - ded2, 2),
+                    'rows':          rows,
+                    'base':          base,
+                    'landing_key':   landing_key,
+                    'landing_name':  matched[landing_key],
+                    'total_out':     total_out,
+                    'any_cap':       bool(capped_by_income),
+                    'capped_banks':  list(capped_by_income.keys()),
+                    'pre_exc_out':   pre_exc_out,
+                    'pre_exc_recv':  pre_exc_recv,
+                    'income_liq':    income_liq,
+                    'pre_exc_liq':   pre_exc_liq,
+                    'total_liquid':  total_liquid,
+                    'caps':          caps_used,
+                }
+
+            except (ValueError, TypeError) as exc:
+                error = str(exc)
 
     return render(request, 'budget/income_splitter.html', {
-        'current':                current,
-        'matched':                matched,
-        'all_balances':           all_balances,
-        'mmbak_error':            mmbak_error,
-        'mmbak_name':             mmbak_name,
-        'result':                 result,
-        'income_input':           income_input,
-        'error':                  error,
-        'ded1':                   _INCOME_FIXED_DED_1,
-        'ded2':                   _INCOME_FIXED_DED_2,
-        'slice_cap':              int(_SLICE_CAP),    # default cap (for redistribute / preview)
-        'slice_cap_form':         slice_cap_form,     # persists form input across submits
-        'slice_overflow_preview': slice_overflow_preview,
-        'redistribute_result':    redistribute_result,
-        'landing_key':            landing_key,
+        'current':          current,
+        'matched':          matched,
+        'all_balances':     all_balances,
+        'mmbak_error':      mmbak_error,
+        'mmbak_name':       mmbak_name,
+        'result':           result,
+        'redistribute_only': redistribute_only,
+        'overflow_preview': overflow_preview,
+        'income_input':     income_input,
+        'landing_key':      landing_key,
+        'error':            error,
+        'ded1':             _INCOME_FIXED_DED_1,
+        'ded2':             _INCOME_FIXED_DED_2,
+        'caps_form':        caps_form,
+        'default_caps':     _DEFAULT_CAPS,
+        'bank_logos':       _BANK_LOGOS,
     })
 
 

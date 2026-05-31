@@ -46,6 +46,19 @@ Supports 16 cities out of the box: Ahmedabad, Bangalore, Chandigarh, Chennai, Co
 - **Header shows total rupee amount** (₹X,XX,XXX.XX) that updates live as sliders are adjusted
 - Category amounts computed using integer-paise arithmetic — the "Other" category absorbs rounding residual so the displayed amounts always sum to exactly the total budget
 
+### Income Splitter
+
+A dedicated tab (`/income-splitter/`) that turns a salary deposit into a precise transfer plan.
+
+- **Split rules** — fixed deductions (₹28,168 + ₹38,500) route to HDFC first; remaining distributable splits 10 % Slice SFB / 20 % IDFC First / 20 % Union Bank / 50 % HDFC
+- **Landing account** — choose which bank the income lands in; all transfer instructions follow from that choice
+- **Per-bank balance caps** — configurable ceiling per account (defaults: HDFC 50 L, IDFC 20 L, Union 20 L, Slice 2 L); "No cap" toggle per row. When a bank would exceed its cap, overflow redistributes to uncapped banks weighted by base allocation (HDFC ≫ IDFC = Union ≫ Slice), giving intuitive ratios: HDFC + Slice capped → 50:50 IDFC:Union; IDFC + Slice capped → ~71:29 HDFC:Union; etc.
+- **Pre-existing excess handling** — if a bank's live balance already exceeds its cap, the excess is redistributed on the same weighted scheme — shown both in the income calculation and via the standalone **Redistribute Excess** button (no income required)
+- **Liquid fund callout** — if all four caps are simultaneously met, unplaceable surplus is flagged for liquid fund investment
+- **Live balances** — reads the latest `.mmbak` backup using a new transaction-based balance engine (`get_all_account_balances` in `mmbak_importer.py`)
+- **Step-by-step breakdown, allocation table, and action checklist** — shows exactly what to keep and what to transfer, with projected new balances per account
+- **Bank logos** — Clearbit Logo API with branded coloured-initial fallback badges
+
 ### Other
 - **Multi-city support** — 16 Indian cities; all baselines calibrated per city. Change city in Settings at any time
 - **Detect My Location** — one-click auto-detect via browser Geolocation + Nominatim reverse-geocode
@@ -81,13 +94,14 @@ budgeting_tool/
 │   ├── static/budget/
 │   │   └── favicon.svg     # Brand icon (bar chart, green/gold)
 │   ├── templatetags/
-│   │   └── budget_filters.py   # indian_number, get_item, get_field
+│   │   └── budget_filters.py   # indian_number, indian_int, get_item, get_field
 │   ├── templates/budget/
 │   │   ├── base.html
 │   │   ├── dashboard.html
 │   │   ├── set_budget.html
 │   │   ├── history.html
-│   │   └── settings.html
+│   │   ├── settings.html
+│   │   └── income_splitter.html
 │   └── migrations/
 │       ├── 0001_initial.py
 │       ├── 0002_appsettings_alter_budgetsplit_category.py
@@ -164,8 +178,9 @@ The server runs with `--noreload` to prevent Django's file-watcher from polling 
 
 1. **Dashboard** — landing page shows the current month's budget split (if set), Living Budget breakdown, allocation donut, and live cost data. The previous month's actual spending is always shown as a reference card. Below: MoM comparison chart, trend chart, and a Recent Months table with Budget/Actual paired rows.
 2. **Set Budget** — enter your total monthly income. BudgetIQ automatically imports **every available month** of actuals from the latest `.mmbak` backup (including the current month's partial data when after the 25th), retrains the CNN-GRU model on the full history, and generates a suggested split. The averaged actuals across all imported months are displayed as a reference panel while you review and adjust. Before the 25th the form targets the current month; from the 25th onwards it defaults to next month.
-3. **History** — all recorded months in a unified table (budget + actuals side by side); months with actuals but no budget also appear. Toggle the stacked chart between budgeted and actual allocations.
-4. **Settings** — select your city, update monthly rent, loan EMI amount, and EMI end date.
+3. **Income Splitter** — enter an income amount (e.g. salary), pick the landing bank, set per-bank balance caps, and get a precise "keep / transfer" plan. Hit **Redistribute Excess** at any time (no income needed) to see if any bank is over its cap and where to move the excess. The app reads live balances from the latest `.mmbak` backup automatically.
+4. **History** — all recorded months in a unified table (budget + actuals side by side); months with actuals but no budget also appear. Toggle the stacked chart between budgeted and actual allocations.
+5. **Settings** — select your city, update monthly rent, loan EMI amount, and EMI end date.
 
 ### How the model works
 
