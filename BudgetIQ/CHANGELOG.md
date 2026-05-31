@@ -9,6 +9,37 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [1.0.6] — 2026-05-31
+
+### Added
+
+- **Auto-capping in Income Splitter** — when the page loads, balance caps are automatically derived from average monthly expenses computed from the latest `.mmbak` file:
+  - HDFC = 1.5 × average monthly expenses (~6 weeks of spend float)
+  - IDFC First = 1.0 × average monthly expenses (~1 month savings buffer)
+  - Slice SFB = ₹25,000 (fixed small float, not expense-linked)
+  - Union Bank = ₹20,00,000 (unchanged fixed ceiling)
+  
+  Auto-caps refresh on every page load so they always reflect the freshest data. Users can override any value in the cap table before submitting. A green info bar below the table shows the basis: *"Auto-computed from N months of expenses (avg ₹X/mo)"*.
+
+- **`get_average_monthly_expenses(filepath)`** in `mmbak_importer.py` — queries `INOUTCOME` for all expense transactions (`DO_TYPE = 1, IS_DEL = 0`), groups by calendar month, and returns `(average_amount, n_months)`.
+
+- **`_auto_caps(avg_monthly_expenses)`** helper in `views.py` — maps the average to per-bank cap values using the multipliers above. Falls back to `_DEFAULT_CAPS` when no mmbak data is available.
+
+### Changed
+
+- Income Splitter form defaults for HDFC, IDFC, and Slice caps now come from `_auto_caps()` rather than the hardcoded `_DEFAULT_CAPS` dict. Union Bank cap default remains ₹20,00,000.
+
+### Performance
+
+- **Dashboard no longer blocks on World Bank API calls** — `get_or_fetch_cost_snapshot` now returns immediately on every request:
+  - Exact cache hit → returned directly (no network, unchanged).
+  - Cache miss (any reason, including `force=True`) → spawns a daemon background thread to fetch live CPI/inflation data, then immediately returns the most recent stale snapshot for that city. If no stale snapshot exists, returns an unsaved `CostSnapshot` built from static `CITY_BASELINES` at zero latency; the background thread persists the real figures when it completes.
+  - A module-level `_refresh_in_progress` set (protected by a `threading.Lock`) prevents duplicate concurrent refreshes for the same `(year, month, city)` key.
+  - API request timeouts reduced from 8 s to 3 s so network failures resolve quickly in all code paths.
+  - Dashboard and Set Budget response times drop from up to 16 s (two sequential 8 s timeouts) to < 10 ms in all but the very first load for a brand-new installation.
+
+---
+
 ## [1.0.5] — 2026-05-31
 
 ### Added

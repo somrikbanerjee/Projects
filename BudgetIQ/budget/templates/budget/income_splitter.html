@@ -355,9 +355,19 @@
 
               </tbody>
             </table>
-            <div class="mt-1" style="font-size:.7rem;color:var(--fin-muted);">
-              Overflow distributes by priority: HDFC (primary) &rsaquo; IDFC &amp; Union &rsaquo; Slice.
+            {% if avg_expenses %}
+            <div class="mt-2 p-2 rounded" style="background:rgba(0,200,150,.06);border:1px solid rgba(0,200,150,.15);font-size:.71rem;color:var(--fin-muted);line-height:1.5;">
+              <i class="bi bi-magic text-fin me-1"></i>
+              Auto-computed from <strong style="color:var(--fin-text);">{{ n_expense_months }} month{{ n_expense_months|pluralize }}</strong> of expenses
+              (avg ₹{{ avg_expenses|indian_number }}/mo) —
+              HDFC&nbsp;=&nbsp;1.5×, IDFC&nbsp;=&nbsp;1×, Slice&nbsp;=&nbsp;₹25,000, Union&nbsp;=&nbsp;₹20L.
+              Edit any value above to override.
             </div>
+            {% else %}
+            <div class="mt-1" style="font-size:.7rem;color:var(--fin-muted);">
+              No mmbak data found — using default caps. Overflow distributes by priority: HDFC &rsaquo; IDFC&nbsp;=&nbsp;Union &rsaquo; Slice.
+            </div>
+            {% endif %}
           </div>
 
           {# Split rules summary #}

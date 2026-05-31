@@ -19,6 +19,7 @@ from .cost_data import get_or_fetch_cost_snapshot, resolve_city_from_coords, SUP
 from .mmbak_importer import (
     import_actuals_for_month, import_all_available_actuals,
     find_latest_mmbak, get_all_account_balances,
+    get_average_monthly_expenses,
 )
 
 
@@ -738,6 +739,25 @@ def _compute_pre_excess(current: dict, caps: dict):
     return excess_out, {k: v for k, v in received.items() if v > 0.005}, round(liquid, 2)
 
 
+def _auto_caps(avg_monthly_expenses) -> dict:
+    """
+    Derive suggested balance caps from average monthly expense spend.
+
+    HDFC  = 1.5 × avg  (main spending account — ~6 weeks of expenses)
+    IDFC  = 1.0 × avg  (secondary savings — ~1 month of expenses)
+    Union = 20 L       (fixed; secondary savings, not expense-linked)
+    Slice = ₹25,000    (fixed; tertiary / small float)
+    """
+    if avg_monthly_expenses is None:
+        return dict(_DEFAULT_CAPS)
+    return {
+        'hdfc':  round(avg_monthly_expenses * 1.5),
+        'idfc':  round(avg_monthly_expenses * 1.0),
+        'union': _DEFAULT_CAPS['union'],
+        'slice': 25_000.0,
+    }
+
+
 def _read_caps_from_post(post) -> dict:
     """Parse per-bank caps from POST data. Returns {key: float_or_None}."""
     caps = {}
@@ -776,8 +796,14 @@ def income_splitter(request):
         current[key] = bal
         matched[key] = name
 
+    # Compute average monthly expenses from mmbak → auto-caps
+    avg_expenses, n_expense_months = (
+        get_average_monthly_expenses(filepath) if filepath else (None, 0)
+    )
+    auto_cap_values = _auto_caps(avg_expenses)
+
     # Default caps (used for GET-state previews)
-    default_caps = dict(_DEFAULT_CAPS)
+    default_caps = auto_cap_values
 
     # ── Pre-existing overflow preview (shown in left panel on load) ─────────
     exc_preview_out, exc_preview_recv, exc_preview_liq = _compute_pre_excess(
@@ -963,9 +989,12 @@ def income_splitter(request):
         'error':            error,
         'ded1':             _INCOME_FIXED_DED_1,
         'ded2':             _INCOME_FIXED_DED_2,
-        'caps_form':        caps_form,
-        'default_caps':     _DEFAULT_CAPS,
-        'bank_logos':       _BANK_LOGOS,
+        'caps_form':          caps_form,
+        'default_caps':       _DEFAULT_CAPS,
+        'auto_cap_values':    auto_cap_values,
+        'avg_expenses':       avg_expenses,
+        'n_expense_months':   n_expense_months,
+        'bank_logos':         _BANK_LOGOS,
     })
 
 

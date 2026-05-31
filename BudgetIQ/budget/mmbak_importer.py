@@ -171,6 +171,39 @@ def import_actuals_for_month(year: int, month: int) -> "MonthlyActual | None":
     return save_actuals_to_db(year, month, expenses, filepath)
 
 
+def get_average_monthly_expenses(filepath: str) -> tuple:
+    """
+    Compute average monthly total expense from all expense transactions
+    (DO_TYPE = 1, IS_DEL = 0) in the .mmbak file.
+
+    Returns (avg_amount: float, n_months: int).
+    Returns (None, 0) on any error or if the file has no expense data.
+    """
+    sql = """
+        SELECT
+            strftime('%Y-%m', datetime(ZDATE/1000, 'unixepoch', 'localtime')) AS ym,
+            ROUND(SUM(CAST(ZMONEY AS REAL)), 2)                               AS monthly_total
+        FROM INOUTCOME
+        WHERE IS_DEL = 0
+          AND DO_TYPE = 1
+        GROUP BY ym
+        ORDER BY ym
+    """
+    try:
+        conn = sqlite3.connect(filepath)
+        cur  = conn.cursor()
+        cur.execute(sql)
+        rows = cur.fetchall()
+        conn.close()
+        totals = [float(row[1]) for row in rows if row[1] is not None]
+        if not totals:
+            return None, 0
+        return round(sum(totals) / len(totals), 2), len(totals)
+    except Exception as exc:
+        logger.warning("Failed to compute average monthly expenses from %s: %s", filepath, exc)
+        return None, 0
+
+
 def get_all_account_balances(filepath: str) -> dict:
     """
     Compute current account balances from a Money Manager .mmbak SQLite backup.

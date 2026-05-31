@@ -55,6 +55,7 @@ A dedicated tab (`/income-splitter/`) that turns a salary deposit into a precise
 - **Per-bank balance caps** — configurable ceiling per account (defaults: HDFC 50 L, IDFC 20 L, Union 20 L, Slice 2 L); "No cap" toggle per row. When a bank would exceed its cap, overflow redistributes to uncapped banks weighted by base allocation (HDFC ≫ IDFC = Union ≫ Slice), giving intuitive ratios: HDFC + Slice capped → 50:50 IDFC:Union; IDFC + Slice capped → ~71:29 HDFC:Union; etc.
 - **Pre-existing excess handling** — if a bank's live balance already exceeds its cap, the excess is redistributed on the same weighted scheme — shown both in the income calculation and via the standalone **Redistribute Excess** button (no income required)
 - **Liquid fund callout** — if all four caps are simultaneously met, unplaceable surplus is flagged for liquid fund investment
+- **Auto-capping** — on every page load, balance caps are derived automatically from average monthly expenses in the latest `.mmbak`: HDFC = 1.5× avg, IDFC = 1× avg, Slice = ₹25,000 fixed, Union = ₹20 L fixed. An info bar shows the data source and multipliers; any cap can be overridden before submitting
 - **Live balances** — reads the latest `.mmbak` backup using a new transaction-based balance engine (`get_all_account_balances` in `mmbak_importer.py`)
 - **Step-by-step breakdown, allocation table, and action checklist** — shows exactly what to keep and what to transfer, with projected new balances per account
 - **Bank logos** — Clearbit Logo API with branded coloured-initial fallback badges
@@ -64,6 +65,7 @@ A dedicated tab (`/income-splitter/`) that turns a salary deposit into a precise
 - **Detect My Location** — one-click auto-detect via browser Geolocation + Nominatim reverse-geocode
 - **Indian number formatting** — all amounts display in the Indian comma convention (₹1,30,000.00)
 - **Background service** — ships as a macOS LaunchAgent; starts at login, serves on `http://127.0.0.1:8080/`
+- **Non-blocking cost data** — the dashboard never waits for the World Bank API. `get_or_fetch_cost_snapshot` returns a cached or static-baseline snapshot immediately and refreshes live CPI/inflation data in a background daemon thread. API timeouts are capped at 3 s; duplicate refresh threads are deduplicated via a module-level lock
 
 ## Tech Stack
 
@@ -88,7 +90,8 @@ budgeting_tool/
 │   ├── views.py            # Dashboard, set-budget (2-step), history, settings, API
 │   ├── ml_engine.py        # 1D-CNN + GRU prediction engine; load_history_from_db
 │   ├── cost_data.py        # Live cost-data fetch (World Bank, Numbeo baselines)
-│   ├── mmbak_importer.py   # Money Manager backup reader; actual-spending importer
+│   ├── mmbak_importer.py   # Money Manager backup reader; actual-spending importer;
+│   │                       # account balance engine; average-expense calculator
 │   ├── forms.py            # BudgetInputForm, SplitAdjustmentForm, AppSettingsForm
 │   ├── urls.py             # URL routing
 │   ├── static/budget/
