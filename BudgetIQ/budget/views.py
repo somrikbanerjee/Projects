@@ -19,8 +19,9 @@ from .cost_data import get_or_fetch_cost_snapshot, resolve_city_from_coords, SUP
 from .mmbak_importer import (
     import_actuals_for_month, import_all_available_actuals,
     find_latest_mmbak, get_all_account_balances,
-    get_average_monthly_expenses,
+    get_average_monthly_expenses, get_fd_balances,
 )
+from .bank_rate_fetcher import get_cached_bank_features, force_refresh as _force_bank_refresh
 
 
 def _compute_actual_avg(before_year: int, before_month: int) -> dict | None:
@@ -568,6 +569,347 @@ _BASE_WEIGHTS = {'hdfc': 0.50, 'idfc': 0.20, 'union': 0.20, 'slice': 0.10}
 # Display order used throughout
 _ACCOUNT_ORDER = ['slice', 'idfc', 'union', 'hdfc']
 
+# ── Bulk reserve split rules ──────────────────────────────────────────────────
+# Up to this amount is kept as liquid savings; anything above goes into FDs.
+_BULK_LIQUID_THRESHOLD = 5_00_000.0   # ₹5 L
+
+# FD account names as stored in Money Manager (fuzzy-matched against ASSETS)
+_FD_ACCOUNT_NAMES = {
+    'hdfc':  'HDFC Fixed Deposit',
+    'idfc':  'IDFC Fixed Deposit',
+    'union': 'UBI Fixed Deposit',
+    'slice': 'Slice Fixed Deposit',
+}
+
+# ── Bank feature knowledge base ───────────────────────────────────────────────
+# Static as of Q4 2025. Slice is the salary/landing account (fixed); its
+# salary_prog_score is irrelevant for role assignment and excluded from weights.
+_BANK_FEATURES = {
+    'hdfc': {
+        'name':               'HDFC Bank',
+        'savings_rate_pct':   3.50,   # % pa on savings account balance
+        'fd_rate_pct':        7.00,   # % pa typical 1–2 yr FD (Q4 2025)
+        'psu_stability':      7.0,    # 0–10 (PSU=10, large private=7, SFB=4)
+        'card_rewards_score': 9,
+        'upi_cashback_score': 7,
+        'instant_fd':         True,
+        'fd_min_amount':      5_000,  # ₹ minimum FD amount
+        'fd_flexibility':     8,      # 0–10: ease of premature withdrawal (penalty + process)
+        'fd_digital_ease':    9,      # 0–10: ease of opening FD via app / netbanking
+        'min_balance':        10_000,
+        'digital_ux_score':   9,
+        'offer_breadth':      9,
+        'notes': (
+            "India's largest private bank. Infinia / Diners Club / Millennia card "
+            "ecosystem with best-in-class rewards. 7% FD rate (1–2 yr), fully digital "
+            "FD creation and instant premature withdrawal. Savings rate 3.5% offset by "
+            "superior transaction perks."
+        ),
+        'data_as_of': 'Q4 2025',
+    },
+    'idfc': {
+        'name':               'IDFC First Bank',
+        'savings_rate_pct':   6.50,
+        'fd_rate_pct':        7.50,   # among the highest scheduled bank FD rates
+        'psu_stability':      6.0,
+        'card_rewards_score': 9,
+        'upi_cashback_score': 8,
+        'instant_fd':         True,
+        'fd_min_amount':      10_000,
+        'fd_flexibility':     7,      # some premature withdrawal penalty
+        'fd_digital_ease':    8,
+        'min_balance':        25_000,
+        'digital_ux_score':   7,
+        'offer_breadth':      8,
+        'notes': (
+            "7.5% FD rate (1–2 yr) — best among the 4 banks. 6.5% savings rate. "
+            "Ideal for fast emergency buffer where yield matters on both the liquid "
+            "and FD portions. Higher min balance is a mild downside."
+        ),
+        'data_as_of': 'Q4 2025',
+    },
+    'union': {
+        'name':               'Union Bank of India',
+        'savings_rate_pct':   4.00,
+        'fd_rate_pct':        6.80,
+        'psu_stability':      10.0,   # government-owned PSU — max stability
+        'card_rewards_score': 4,
+        'upi_cashback_score': 4,
+        'instant_fd':         True,
+        'fd_min_amount':      1_000,  # very low minimum FD
+        'fd_flexibility':     6,      # PSU processes can be slower
+        'fd_digital_ease':    5,
+        'min_balance':        2_000,
+        'digital_ux_score':   5,
+        'offer_breadth':      4,
+        'notes': (
+            "PSU bank — government-owned, DICGC-insured up to ₹5L per depositor. "
+            "6.8% FD rate. Low minimum FD of ₹1,000 means incremental FD creation "
+            "is easy. Maximum institutional safety for a large emergency corpus. "
+            "Workflow: first ₹5L in liquid savings, rest as FDs."
+        ),
+        'data_as_of': 'Q4 2025',
+    },
+    'slice': {
+        'name':               'Slice Small Finance Bank',
+        'savings_rate_pct':   7.00,
+        'fd_rate_pct':        8.25,
+        'psu_stability':      4.0,
+        'card_rewards_score': 7,
+        'upi_cashback_score': 8,
+        'instant_fd':         False,
+        'fd_min_amount':      1_000,
+        'fd_flexibility':     5,
+        'fd_digital_ease':    7,
+        'min_balance':        0,
+        'digital_ux_score':   8,
+        'offer_breadth':      6,
+        'notes': (
+            "Primary salary / income landing account (fixed role). Capped at ₹25,000 "
+            "— small finance bank, limited DICGC protection for large balances."
+        ),
+        'data_as_of': 'Q4 2025',
+    },
+}
+
+# Roles available for dynamic assignment (Slice is always 'landing')
+_VARIABLE_ROLES = ['main_spending', 'fast_emergency', 'bulk_emergency']
+_VARIABLE_CANDIDATES = ['hdfc', 'idfc', 'union']
+
+_ROLE_LABELS = {
+    'main_spending':   'Main Spending',
+    'fast_emergency':  'Fast Emergency',
+    'bulk_emergency':  'Bulk Reserve',
+    'landing':         'Salary / Landing',
+}
+_ROLE_ICONS = {
+    'main_spending':  'bi-wallet2',
+    'fast_emergency': 'bi-lightning-charge',
+    'bulk_emergency': 'bi-safe',
+    'landing':        'bi-arrow-down-circle',
+}
+_ROLE_COLOURS = {
+    'main_spending':  '#4b9fff',
+    'fast_emergency': '#f0b429',
+    'bulk_emergency': '#00c896',
+    'landing':        '#9d50e8',
+}
+
+# ── Feature weight matrices per role ─────────────────────────────────────────
+# Salary account features intentionally excluded — Slice is always the salary
+# account; HDFC / IDFC / Union are evaluated purely on spending / emergency merits.
+
+_SPENDING_WEIGHTS = {
+    # What matters for a main spending / debit account
+    'card_rewards_score': 0.35,
+    'upi_cashback_score': 0.25,
+    'digital_ux_score':   0.20,
+    'offer_breadth':      0.20,
+}
+_FAST_EMERGENCY_WEIGHTS = {
+    # What matters for a fast-access emergency tranche
+    'savings_rate_norm':  0.40,   # savings_rate_pct normalised to 0–10 scale
+    'instant_fd_score':   0.30,   # 10 if instant FD, else 0
+    'digital_ux_score':   0.20,
+    'min_balance_inv':    0.10,   # 10 - clamp(min_balance / 5000, 0, 10)
+}
+_BULK_EMERGENCY_WEIGHTS = {
+    # What matters for a large 5L liquid + rest-in-FD emergency reserve
+    'psu_stability':      0.30,   # safety for large sums
+    'fd_rate_norm':       0.30,   # yield on the FD portion (typically 75%+ of total)
+    'fd_flexibility':     0.20,   # ease of premature withdrawal if emergency strikes
+    'fd_digital_ease':    0.10,   # incremental FD creation workflow
+    'min_balance_inv':    0.10,   # lower min-balance = better for variable liquid portion
+}
+
+
+def _derived_features(key: str, features: dict | None = None) -> dict:
+    """Compute derived normalised features from raw bank data."""
+    f = (features or _BANK_FEATURES)[key]
+    return {
+        'savings_rate_norm': min(f['savings_rate_pct'], 10.0),
+        'fd_rate_norm':      min(f['fd_rate_pct'], 10.0),
+        'instant_fd_score':  10.0 if f['instant_fd'] else 0.0,
+        'min_balance_inv':   max(0.0, 10.0 - f['min_balance'] / 5_000),
+        'psu_stability':     f['psu_stability'],
+        'fd_flexibility':    f.get('fd_flexibility', 5),
+        'fd_digital_ease':   f.get('fd_digital_ease', 5),
+    }
+
+
+def _score_for_role(key: str, role: str) -> float:
+    """Return a 0–10 composite score for `key` account in the given role."""
+    f   = _BANK_FEATURES[key]
+    der = _derived_features(key)
+
+    if role == 'main_spending':
+        vals = {k: f[k] for k in _SPENDING_WEIGHTS}
+    elif role == 'fast_emergency':
+        vals = {k: der[k] if k in der else f.get(k, 0) for k in _FAST_EMERGENCY_WEIGHTS}
+    else:  # bulk_emergency
+        vals = {k: der[k] if k in der else f.get(k, 0) for k in _BULK_EMERGENCY_WEIGHTS}
+
+    weights = {
+        'main_spending':   _SPENDING_WEIGHTS,
+        'fast_emergency':  _FAST_EMERGENCY_WEIGHTS,
+        'bulk_emergency':  _BULK_EMERGENCY_WEIGHTS,
+    }[role]
+
+    return round(sum(vals[k] * w for k, w in weights.items()), 2)
+
+
+def _recommend_roles() -> dict:
+    """
+    Assign HDFC, IDFC, Union to (main_spending, fast_emergency, bulk_emergency)
+    using a greedy max-score assignment (equivalent to Hungarian algorithm for 3×3).
+
+    Slice is always 'landing' (fixed). Scoring excludes salary benefits.
+    Live rates from the cache are merged into _BANK_FEATURES before scoring.
+
+    Returns a recommendation dict with assignment, per-bank scores, and reasoning.
+    """
+    # Merge cached live rates into baseline features (non-blocking)
+    live_features, fetched_at = get_cached_bank_features(_BANK_FEATURES)
+    # Temporarily override module-level _BANK_FEATURES for this call scope
+    # (we do NOT mutate the module-level dict — we pass live_features explicitly)
+
+    def _score(key, role):
+        f   = live_features[key]
+        der = {
+            'savings_rate_norm': min(f['savings_rate_pct'], 10.0),
+            'fd_rate_norm':      min(f['fd_rate_pct'], 10.0),
+            'instant_fd_score':  10.0 if f['instant_fd'] else 0.0,
+            'min_balance_inv':   max(0.0, 10.0 - f['min_balance'] / 5_000),
+            'psu_stability':     f['psu_stability'],
+        }
+        if role == 'main_spending':
+            vals    = {k: f[k] for k in _SPENDING_WEIGHTS}
+            weights = _SPENDING_WEIGHTS
+        elif role == 'fast_emergency':
+            vals    = {k: der.get(k, f.get(k, 0)) for k in _FAST_EMERGENCY_WEIGHTS}
+            weights = _FAST_EMERGENCY_WEIGHTS
+        else:
+            vals    = {k: der.get(k, f.get(k, 0)) for k in _BULK_EMERGENCY_WEIGHTS}
+            weights = _BULK_EMERGENCY_WEIGHTS
+        return round(sum(vals[k] * w for k, w in weights.items()), 2)
+
+    # Build 3×3 score matrix
+    matrix = {
+        key: {role: _score(key, role) for role in _VARIABLE_ROLES}
+        for key in _VARIABLE_CANDIDATES
+    }
+
+    # Greedy assignment: pick global max, assign, remove bank+role, repeat
+    assignment = {}   # role → bank key
+    remaining_banks = set(_VARIABLE_CANDIDATES)
+    remaining_roles = set(_VARIABLE_ROLES)
+
+    while remaining_banks and remaining_roles:
+        best = max(
+            ((bank, role, matrix[bank][role])
+             for bank in remaining_banks for role in remaining_roles),
+            key=lambda x: x[2],
+        )
+        bank, role, _ = best
+        assignment[role] = bank
+        remaining_banks.discard(bank)
+        remaining_roles.discard(role)
+
+    assignment['landing'] = 'slice'
+
+    # Build short reasoning strings for the UI
+    def _reason(role, bank):
+        f = live_features[bank]
+        s = matrix.get(bank, {}).get(role, 0)
+        if role == 'landing':
+            return f"{f['name']} is the salary / income landing account (fixed role)."
+        if role == 'main_spending':
+            return (
+                f"{f['name']} scores {s:.1f}/10 for spending — "
+                f"card rewards {f['card_rewards_score']}/10, "
+                f"UPI cashback {f['upi_cashback_score']}/10, "
+                f"digital UX {f['digital_ux_score']}/10."
+            )
+        elif role == 'fast_emergency':
+            return (
+                f"{f['name']} scores {s:.1f}/10 for fast emergency — "
+                f"{f['savings_rate_pct']}% savings rate, "
+                f"{'instant FD' if f['instant_fd'] else 'no instant FD'}, "
+                f"digital UX {f['digital_ux_score']}/10."
+            )
+        elif role == 'bulk_emergency':
+            return (
+                f"{f['name']} scores {s:.1f}/10 for bulk reserve — "
+                f"PSU stability {f['psu_stability']}/10, "
+                f"FD rate {f['fd_rate_pct']}%, "
+                f"min balance ₹{f['min_balance']:,}."
+            )
+        return f"{f['name']} is the income landing account (fixed)."
+
+    reasons = {role: _reason(role, bank) for role, bank in assignment.items()}
+
+    # Human-readable freshness label
+    data_freshness = 'Q4 2025 baseline'
+    if fetched_at:
+        try:
+            dt = datetime.datetime.fromisoformat(fetched_at)
+            data_freshness = dt.strftime('live — refreshed %d %b %Y %H:%M')
+        except Exception:
+            pass
+
+    # Pre-build ordered display rows (used directly by the template)
+    role_order  = ['main_spending', 'fast_emergency', 'bulk_emergency', 'landing']
+    display_row = {
+        'main_spending':  {'colour': '#4b9fff', 'icon': 'bi-wallet2',         'label': 'Main Spending'},
+        'fast_emergency': {'colour': '#f0b429', 'icon': 'bi-lightning-charge', 'label': 'Fast Emergency'},
+        'bulk_emergency': {'colour': '#00c896', 'icon': 'bi-safe',             'label': 'Bulk Reserve'},
+        'landing':        {'colour': '#9d50e8', 'icon': 'bi-arrow-down-circle','label': 'Salary / Landing'},
+    }
+    display_rows = []
+    for role in role_order:
+        bank  = assignment[role]
+        feat  = live_features[bank]
+        score = matrix.get(bank, {}).get(role)
+        meta  = display_row[role]
+        display_rows.append({
+            'role':    role,
+            'bank':    bank,
+            'name':    feat['name'],
+            'score':   score,
+            'colour':  meta['colour'],
+            'icon':    meta['icon'],
+            'label':   meta['label'],
+            'notes':   feat.get('notes', ''),
+            'reason':  reasons.get(role, ''),
+            'savings_rate_pct': feat.get('savings_rate_pct'),
+            'fd_rate_pct':      feat.get('fd_rate_pct'),
+        })
+
+    return {
+        'assignment':     assignment,   # role → bank key
+        'scores':         matrix,       # bank → role → score
+        'reasons':        reasons,
+        'features':       live_features,
+        'display_rows':   display_rows,
+        'data_freshness': data_freshness,
+    }
+
+
+def _caps_from_recommendation(avg_expenses, recommendation) -> dict:
+    """Derive caps using the role recommendation and average monthly expenses."""
+    assignment = recommendation['assignment']  # role → bank key
+    caps = {}
+    for role, bank in assignment.items():
+        if role == 'main_spending':
+            caps[bank] = round(avg_expenses * 1.5) if avg_expenses else _DEFAULT_CAPS.get(bank, 20_00_000)
+        elif role == 'fast_emergency':
+            caps[bank] = round(avg_expenses * 1.0) if avg_expenses else _DEFAULT_CAPS.get(bank, 20_00_000)
+        elif role == 'bulk_emergency':
+            caps[bank] = 20_00_000.0
+        elif role == 'landing':
+            caps[bank] = 25_000.0
+    return caps
+
 
 def _match_account(target: str, all_balances: dict):
     """Return (balance, matched_name) via exact → case-insensitive → partial match."""
@@ -740,22 +1082,9 @@ def _compute_pre_excess(current: dict, caps: dict):
 
 
 def _auto_caps(avg_monthly_expenses) -> dict:
-    """
-    Derive suggested balance caps from average monthly expense spend.
-
-    HDFC  = 1.5 × avg  (main spending account — ~6 weeks of expenses)
-    IDFC  = 1.0 × avg  (secondary savings — ~1 month of expenses)
-    Union = 20 L       (fixed; secondary savings, not expense-linked)
-    Slice = ₹25,000    (fixed; tertiary / small float)
-    """
-    if avg_monthly_expenses is None:
-        return dict(_DEFAULT_CAPS)
-    return {
-        'hdfc':  round(avg_monthly_expenses * 1.5),
-        'idfc':  round(avg_monthly_expenses * 1.0),
-        'union': _DEFAULT_CAPS['union'],
-        'slice': 25_000.0,
-    }
+    """Derive caps using the role recommender (replaces hardcoded HDFC=1.5x, IDFC=1x)."""
+    rec = _recommend_roles()
+    return _caps_from_recommendation(avg_monthly_expenses, rec)
 
 
 def _read_caps_from_post(post) -> dict:
@@ -796,11 +1125,15 @@ def income_splitter(request):
         current[key] = bal
         matched[key] = name
 
-    # Compute average monthly expenses from mmbak → auto-caps
+    # FD balances keyed by bank — {hdfc: float, idfc: float, union: float, slice: float}
+    fd_current = get_fd_balances(filepath) if filepath else {}
+
+    # Compute average monthly expenses from mmbak → role recommendation → auto-caps
     avg_expenses, n_expense_months = (
         get_average_monthly_expenses(filepath) if filepath else (None, 0)
     )
-    auto_cap_values = _auto_caps(avg_expenses)
+    recommendation  = _recommend_roles()
+    auto_cap_values = _caps_from_recommendation(avg_expenses, recommendation)
 
     # Default caps (used for GET-state previews)
     default_caps = auto_cap_values
@@ -843,8 +1176,15 @@ def income_splitter(request):
 
         if action == 'redistribute':
             # ── Redistribute only (no income) ────────────────────────────
+            # Use savings + FD as effective balance for the bulk reserve bank
             cur_known = {k: v for k, v in current.items() if v is not None}
-            exc_out, exc_recv, exc_liq = _compute_pre_excess(cur_known, caps_used)
+            bulk_bank_r = recommendation['assignment'].get('bulk_emergency')
+            eff_known = dict(cur_known)
+            if bulk_bank_r and fd_current.get(bulk_bank_r):
+                eff_known[bulk_bank_r] = round(
+                    cur_known.get(bulk_bank_r, 0) + fd_current.get(bulk_bank_r, 0), 2
+                )
+            exc_out, exc_recv, exc_liq = _compute_pre_excess(eff_known, caps_used)
             rows_r = []
             for key in _ACCOUNT_ORDER:
                 cur = current.get(key)
@@ -897,18 +1237,59 @@ def income_splitter(request):
                 }
                 base['hdfc'] = round(income_input - base['slice'] - base['idfc'] - base['union'], 2)
 
-                # Apply caps to income allocations
+                # Identify bulk reserve bank before any cap computation
+                bulk_bank = recommendation['assignment'].get('bulk_emergency')
+
+                # For the bulk reserve bank the cap covers savings + FD combined.
+                # Merge FD balance into savings so the cap functions refuse inflows
+                # once savings + FD reaches the cap.
                 cur_known = {k: (v or 0) for k, v in current.items()}
+                effective_current = dict(cur_known)
+                if bulk_bank:
+                    effective_current[bulk_bank] = round(
+                        cur_known.get(bulk_bank, 0) + (fd_current.get(bulk_bank) or 0), 2
+                    )
+
                 income_alloc, income_liq, capped_by_income = _apply_income_caps(
-                    base, cur_known, caps_used
+                    base, effective_current, caps_used
                 )
 
                 # Pre-existing excess redistribution (independent of income)
                 pre_exc_out, pre_exc_recv, pre_exc_liq = _compute_pre_excess(
-                    cur_known, caps_used
+                    effective_current, caps_used
                 )
 
                 total_liquid = round(income_liq + pre_exc_liq, 2)
+
+                def _bulk_breakdown(key, alloc):
+                    """Compute liquid/FD split for the bulk reserve bank."""
+                    if key != bulk_bank:
+                        return None
+                    fd_bal     = fd_current.get(key) or 0
+                    sav_bal    = current.get(key) or 0
+                    total_cur  = round(sav_bal + fd_bal, 2)
+                    total_new  = round(total_cur + alloc, 2)
+                    # First ₹5L in liquid savings, rest in FD
+                    new_liq    = round(min(_BULK_LIQUID_THRESHOLD, total_new), 2)
+                    new_fd_tot = round(max(0.0, total_new - _BULK_LIQUID_THRESHOLD), 2)
+                    # How much of the allocation goes to liquid vs FD
+                    cur_liq    = round(min(_BULK_LIQUID_THRESHOLD, total_cur), 2)
+                    liq_add    = round(max(0.0, new_liq - cur_liq), 2)
+                    fd_add     = round(alloc - liq_add, 2)
+                    fd_rate    = (recommendation['features'].get(key) or {}).get('fd_rate_pct')
+                    return {
+                        'liquid_threshold': _BULK_LIQUID_THRESHOLD,
+                        'current_savings':  sav_bal,
+                        'current_fd':       fd_bal,
+                        'current_total':    total_cur,
+                        'new_savings':      round(sav_bal + liq_add, 2),
+                        'new_fd':           round(fd_bal + fd_add, 2),
+                        'new_total':        total_new,
+                        'liq_add':          liq_add,
+                        'fd_add':           fd_add,
+                        'fd_rate':          fd_rate,
+                        'has_existing_fd':  fd_bal > 0,
+                    }
 
                 # Build per-bank rows
                 base_pct = {'slice': '10 %', 'idfc': '20 %', 'union': '20 %', 'hdfc': 'Rem.'}
@@ -927,16 +1308,22 @@ def income_splitter(request):
                     else:
                         pct_label = base_pct[key]
 
-                    new_bal = (
-                        round(cur + alloc + pre_recv - pre_out, 2)
-                        if cur is not None else None
-                    )
+                    bd = _bulk_breakdown(key, alloc)
+                    if bd is not None:
+                        # For bulk bank: new_bal = savings + FD combined total
+                        new_bal = round(bd['new_total'] + pre_recv - pre_out, 2) if cur is not None else None
+                    else:
+                        new_bal = (
+                            round(cur + alloc + pre_recv - pre_out, 2)
+                            if cur is not None else None
+                        )
 
                     rows.append({
-                        'key':      key,
-                        'name':     matched[key],
-                        'pct':      pct_label,
-                        'alloc':    alloc,
+                        'key':           key,
+                        'name':          matched[key],
+                        'pct':           pct_label,
+                        'alloc':         alloc,
+                        'bulk_breakdown': bd,
                         'current':  cur,
                         'cap':      cap,
                         'capped':   capped,
@@ -992,10 +1379,34 @@ def income_splitter(request):
         'caps_form':          caps_form,
         'default_caps':       _DEFAULT_CAPS,
         'auto_cap_values':    auto_cap_values,
+        'fd_current':         fd_current,
+        'bulk_bank':          recommendation['assignment'].get('bulk_emergency'),
         'avg_expenses':       avg_expenses,
         'n_expense_months':   n_expense_months,
+        'recommendation':     recommendation,
+        'role_labels':        _ROLE_LABELS,
+        'role_icons':         _ROLE_ICONS,
+        'role_colours':       _ROLE_COLOURS,
+        'bank_features':      _BANK_FEATURES,
         'bank_logos':         _BANK_LOGOS,
     })
+
+
+def api_refresh_bank_rates(request):
+    """POST — trigger a synchronous bank-rate refresh and return updated freshness."""
+    if request.method != 'POST':
+        return JsonResponse({'error': 'POST only'}, status=405)
+    try:
+        _force_bank_refresh()
+        from .bank_rate_fetcher import _load_cache
+        cache = _load_cache()
+        return JsonResponse({
+            'ok':         True,
+            'fetched_at': cache.get('fetched_at'),
+            'rates':      cache.get('rates', {}),
+        })
+    except Exception as exc:
+        return JsonResponse({'ok': False, 'error': str(exc)}, status=500)
 
 
 def _build_splits_display(percentages: dict, amounts: dict) -> list:

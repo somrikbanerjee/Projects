@@ -55,7 +55,10 @@ A dedicated tab (`/income-splitter/`) that turns a salary deposit into a precise
 - **Per-bank balance caps** — configurable ceiling per account (defaults: HDFC 50 L, IDFC 20 L, Union 20 L, Slice 2 L); "No cap" toggle per row. When a bank would exceed its cap, overflow redistributes to uncapped banks weighted by base allocation (HDFC ≫ IDFC = Union ≫ Slice), giving intuitive ratios: HDFC + Slice capped → 50:50 IDFC:Union; IDFC + Slice capped → ~71:29 HDFC:Union; etc.
 - **Pre-existing excess handling** — if a bank's live balance already exceeds its cap, the excess is redistributed on the same weighted scheme — shown both in the income calculation and via the standalone **Redistribute Excess** button (no income required)
 - **Liquid fund callout** — if all four caps are simultaneously met, unplaceable surplus is flagged for liquid fund investment
-- **Auto-capping** — on every page load, balance caps are derived automatically from average monthly expenses in the latest `.mmbak`: HDFC = 1.5× avg, IDFC = 1× avg, Slice = ₹25,000 fixed, Union = ₹20 L fixed. An info bar shows the data source and multipliers; any cap can be overridden before submitting
+- **Purpose-based role recommender** — a weighted-feature scoring system assigns HDFC Bank, IDFC First Bank, and Union Bank of India to three variable roles: Main Spending (1.5× avg expenses), Fast Emergency (1× avg expenses), and Bulk Reserve (₹20 L cap on combined savings + FD). Slice SFB is always the Salary / Landing account. Scoring uses a 3 × 3 feature matrix (card rewards, savings rate, PSU stability, FD rate, FD flexibility, FD digital ease, UPI cashback, digital UX, min-balance penalty, offer breadth) with weights calibrated per role; salary account benefits are excluded. Union Bank is **not** hard-coded to Bulk — it wins that role because PSU stability (10/10) and FD flexibility dominate the bulk-reserve weight matrix. The assignment algorithm is a greedy max-score solver (equivalent to the Hungarian algorithm for 3 × 3)
+- **Bulk reserve liquid + FD split** — the bulk reserve account follows a two-tier structure: first ₹5,00,000 in liquid savings, remainder in Fixed Deposits. The ₹20 L cap applies to **savings + FD combined**. The "What to Do" section breaks the bulk allocation into a liquid line and an FD line (showing the rate and running FD corpus). FD accounts are read from the `.mmbak` by keyword-matching account names in the Fixed Deposits group (`"HDFC Bank FD"`, `"UBI Fixed Deposit"`, etc.) and summed per bank. When savings + FD already equals the cap, inflows are blocked and overflow redistributes to other accounts or the liquid fund recommendation
+- **Live bank rate refresh** — `bank_rate_fetcher.py` attempts to scrape savings and FD rates from each bank's public website, caches results in `budget/bank_data_cache.json` (refreshed every 24 h via a background daemon thread), and merges live values into the feature baseline before scoring. Falls back silently if scraping fails. A **Refresh rates** button in the UI triggers an immediate refresh and shows the updated timestamp
+- **Auto-capping** — caps follow the role assignment: the Main Spending account gets 1.5× avg monthly expenses, Fast Emergency gets 1×, Bulk Reserve gets ₹20 L, Slice gets ₹25,000. Average expenses are computed from the latest `.mmbak`. An info bar shows the data source and multipliers; any cap can be overridden before submitting
 - **Live balances** — reads the latest `.mmbak` backup using a new transaction-based balance engine (`get_all_account_balances` in `mmbak_importer.py`)
 - **Step-by-step breakdown, allocation table, and action checklist** — shows exactly what to keep and what to transfer, with projected new balances per account
 - **Bank logos** — Clearbit Logo API with branded coloured-initial fallback badges
@@ -91,7 +94,9 @@ budgeting_tool/
 │   ├── ml_engine.py        # 1D-CNN + GRU prediction engine; load_history_from_db
 │   ├── cost_data.py        # Live cost-data fetch (World Bank, Numbeo baselines)
 │   ├── mmbak_importer.py   # Money Manager backup reader; actual-spending importer;
-│   │                       # account balance engine; average-expense calculator
+│   │                       # account balance engine; average-expense calculator;
+│   │                       # FD balance reader (get_fd_balances)
+│   ├── bank_rate_fetcher.py # Live bank rate scraper; JSON cache; background refresh
 │   ├── forms.py            # BudgetInputForm, SplitAdjustmentForm, AppSettingsForm
 │   ├── urls.py             # URL routing
 │   ├── static/budget/

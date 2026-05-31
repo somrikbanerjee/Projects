@@ -9,6 +9,74 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [1.0.8] — 2026-05-31
+
+### Added
+
+- **Bulk reserve liquid + FD split workflow** — the bulk reserve account now follows a two-tier structure: first ₹5,00,000 is kept as liquid savings; anything above ₹5L is directed into Fixed Deposits. The cap (default ₹20L) applies to the **combined** savings + FD balance, not the savings account alone.
+
+  - `_BULK_LIQUID_THRESHOLD = ₹5,00,000` constant added to `views.py`.
+  - `_bulk_breakdown(key, alloc)` inner function computes, per allocation, exactly how much goes to liquid and how much creates/adds to an FD, based on the current savings and FD balances read from the latest `.mmbak`.
+  - "What to Do" card shows a two-line breakdown for the bulk reserve bank: a **Liquid** line (blue droplet icon, new savings total) and a **Create / Add to FD** line (gold lock icon, FD rate %, new FD corpus total).
+  - New balance displayed for the bulk reserve bank reflects the combined savings + FD total.
+
+- **FD balance reader** — `get_fd_balances(filepath)` in `mmbak_importer.py` queries all ASSETS in the Fixed Deposits account group and attributes them to bank keys by name-keyword matching (`hdfc`, `idfc`, `ubi`/`union`, `slice`). Handles both existing naming styles (`"HDFC Fixed Deposit"`, `"UBI Fixed Deposit"`) and the user's new naming convention (`"HDFC Bank FD"`, `"Union Bank of India FD"`). Sums multiple FD accounts for the same bank. Returns `{key: 0.0}` for banks with no FDs yet.
+
+- **FD-specific bank features** — `_BANK_FEATURES` extended with `fd_min_amount` (minimum FD in ₹), `fd_flexibility` (0–10: ease of premature withdrawal), and `fd_digital_ease` (0–10: ease of creating FDs via app/netbanking) for all four banks.
+
+- **Updated bulk scoring weights** — `_BULK_EMERGENCY_WEIGHTS` now directly reflects the liquid + FD workflow: PSU stability 30 %, FD rate 30 %, FD flexibility 20 %, FD digital ease 10 %, min-balance inverse 10 %. `instant_fd_score` removed from bulk weights (superseded by `fd_flexibility`).
+
+- **Savings + FD combined cap enforcement** — before calling `_apply_income_caps` and `_compute_pre_excess`, the bulk reserve bank's effective balance is set to `savings + FD`. This means the income splitter correctly stops routing money to that bank once the combined total reaches the cap, and any overflow redistributes to other accounts (or becomes a liquid fund recommendation) exactly as the existing overflow logic dictates.
+
+- **FD sub-line in Current Balances panel** — for any bank with a non-zero FD balance, the left panel now shows an `FD ₹X` sub-line under the savings balance.
+
+- **`fd_current` and `bulk_bank` in template context** — both passed to the template so the current balances panel and "What to Do" section can render FD-aware output without recomputation.
+
+### Fixed
+
+- **`UnboundLocalError: cannot access local variable 'bulk_bank'`** on POST to `/income-splitter/` — `bulk_bank` was assigned on line 1263 but referenced on line 1246 inside the same function. Python treats any assignment to a name anywhere in a function as making it a local for the entire function scope, so the earlier `if bulk_bank:` raised `UnboundLocalError`. Fixed by moving the assignment to before the `effective_current` block that references it.
+
+---
+
+## [1.0.7] — 2026-05-31
+
+### Added
+
+- **Purpose-based account role recommender in Income Splitter** — a weighted-feature scoring system assigns each of HDFC Bank, IDFC First Bank, and Union Bank of India to one of three variable roles; Slice SFB remains the fixed salary / landing account.
+
+  | Role | Default cap | Key scoring factors |
+  |---|---|---|
+  | Main Spending | 1.5 × avg monthly expenses | Card rewards (35 %), UPI cashback (25 %), digital UX (20 %), offer breadth (20 %) |
+  | Fast Emergency | 1.0 × avg monthly expenses | Savings rate (40 %), instant FD access (30 %), digital UX (20 %), min-balance penalty (10 %) |
+  | Bulk Reserve | ₹20,00,000 fixed | PSU stability (30 %), FD rate (30 %), min-balance inverse (20 %), instant FD (10 %), digital UX (10 %) |
+  | Salary / Landing | ₹25,000 fixed | Fixed — always Slice SFB |
+
+  Salary account benefits are **excluded** from all scoring weights because Slice SFB is always the salary account. Union Bank of India is **not** hard-coded to any role; it competes with HDFC and IDFC and is assigned the role where its score is highest (typically Bulk Reserve due to PSU stability = 10/10). The assignment algorithm is a greedy max-score solver equivalent to the Hungarian algorithm for this 3 × 3 case.
+
+- **`bank_rate_fetcher.py`** — new module that keeps bank feature data current:
+  - Tries HTTP GET against each bank's public rate pages using lightweight regex to extract savings and FD rates.
+  - Caches successfully scraped values in `budget/bank_data_cache.json`; refreshes every 24 h via a background daemon thread.
+  - A `threading.Lock` prevents concurrent refresh threads.
+  - Falls back silently to hardcoded `_BANK_FEATURES` baselines on any scrape failure — the Income Splitter form never blocks on network activity.
+  - `force_refresh()` function for synchronous refresh (used by the manual-refresh endpoint).
+
+- **`/api/refresh-bank-rates/` endpoint** (`POST`) — triggers a synchronous bank-rate refresh and returns `{ok, fetched_at, rates}`. A **"Refresh rates"** button in the Income Splitter UI POSTs to this endpoint, shows a spinner, then displays the updated timestamp on success.
+
+- **`_BANK_FEATURES` knowledge base** in `views.py` — comprehensive static baseline per bank covering savings rate, FD rate, PSU stability score, card rewards, UPI cashback, instant FD availability, minimum balance, digital UX score, offer breadth, and descriptive notes. Sourced from Q4 2025 data; live scraped values override individual fields when available.
+
+- **`_recommend_roles()`** in `views.py` — builds the 3 × 3 score matrix, runs the greedy assignment, and returns `assignment`, `scores`, `reasons`, `features` (live-merged), `display_rows` (pre-built for the template), and `data_freshness` (ISO timestamp or `Q4 2025 baseline` fallback).
+
+- **`_caps_from_recommendation(avg_expenses, recommendation)`** in `views.py` — derives per-bank caps from the role assignment, replacing the previous hardcoded HDFC = 1.5 × avg, IDFC = 1 × avg logic. Caps now follow whichever bank wins each role.
+
+- **Role recommendation panel** in Income Splitter left panel — four colour-coded rows (blue = Main Spending, gold = Fast Emergency, green = Bulk Reserve, purple = Salary/Landing) with bank logo, role badge, score out of 10, and a hover tooltip showing the reasoning. Data freshness and Refresh button shown in the subtitle line.
+
+### Changed
+
+- `_auto_caps()` in `views.py` now delegates entirely to `_recommend_roles()` + `_caps_from_recommendation()` instead of mapping hard-coded account keys to fixed multipliers.
+- Income Splitter view passes `recommendation`, `bank_features`, `role_labels`, `role_icons`, `role_colours`, and `bank_features` to the template context.
+
+---
+
 ## [1.0.6] — 2026-05-31
 
 ### Added

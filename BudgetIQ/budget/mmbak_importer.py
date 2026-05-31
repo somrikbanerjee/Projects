@@ -204,6 +204,74 @@ def get_average_monthly_expenses(filepath: str) -> tuple:
         return None, 0
 
 
+def get_fd_balances(filepath: str) -> dict:
+    """
+    Return {bank_key: total_fd_balance} for all Fixed Deposit accounts.
+
+    Accounts are found by querying ASSETS rows whose groupUid belongs to any
+    ASSETGROUP whose name contains 'Fixed'.  Balances are computed from
+    INOUTCOME transactions using the same DO_TYPE logic as
+    get_all_account_balances.
+
+    Bank keys are assigned by matching the account's NIC_NAME against known
+    bank-name keywords — handles both naming styles:
+      "HDFC Fixed Deposit", "HDFC Bank FD", "UBI Fixed Deposit", etc.
+
+    Multiple FD accounts for the same bank are summed.
+    Returns {key: 0.0} for banks with no FDs; {} on any read error.
+    """
+    BALANCE_SQL = """
+        SELECT
+            a.NIC_NAME,
+            ROUND(COALESCE(SUM(
+                CASE
+                    WHEN t.DO_TYPE IN ('0', '7') THEN  CAST(t.ZMONEY AS REAL)
+                    WHEN t.DO_TYPE = '1'         THEN -CAST(t.ZMONEY AS REAL)
+                    WHEN t.DO_TYPE = '4'         THEN  CAST(t.ZMONEY AS REAL)
+                    WHEN t.DO_TYPE = '3'         THEN -CAST(t.ZMONEY AS REAL)
+                    ELSE 0
+                END
+            ), 0), 2) AS balance
+        FROM ASSETS a
+        LEFT JOIN INOUTCOME t ON t.assetUid = a.uid AND t.IS_DEL = 0
+        WHERE a.groupUid IN (
+            SELECT uid FROM ASSETGROUP
+            WHERE COALESCE(IS_DEL, 0) = 0
+              AND LOWER(ACC_GROUP_NAME) LIKE '%fixed%'
+        )
+        GROUP BY a.uid, a.NIC_NAME
+    """
+    # Keywords used to attribute an FD account to a bank key.
+    # Checked in order; first match wins.
+    BANK_KEYWORDS = {
+        'hdfc':  ['hdfc'],
+        'idfc':  ['idfc'],
+        'union': ['ubi', 'union bank', 'union'],
+        'slice': ['slice'],
+    }
+    try:
+        conn = sqlite3.connect(filepath)
+        cur  = conn.cursor()
+        cur.execute(BALANCE_SQL)
+        rows = cur.fetchall()
+        conn.close()
+
+        result = {k: 0.0 for k in BANK_KEYWORDS}
+        for name, balance in rows:
+            if not name or balance is None:
+                continue
+            nl = name.lower()
+            for key, keywords in BANK_KEYWORDS.items():
+                if any(kw in nl for kw in keywords):
+                    result[key] = round(result[key] + float(balance), 2)
+                    break   # one bank per FD account
+
+        return result
+    except Exception as exc:
+        logger.warning("Failed to read FD balances from %s: %s", filepath, exc)
+        return {}
+
+
 def get_all_account_balances(filepath: str) -> dict:
     """
     Compute current account balances from a Money Manager .mmbak SQLite backup.

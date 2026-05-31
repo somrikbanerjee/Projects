@@ -176,17 +176,28 @@
         {% if all_balances %}
           <div class="section-title mb-2">Current Balances</div>
           <div class="mb-3">
+            {# Savings balance + FD sub-line where FDs exist #}
+
             <div class="acct-row">
               <span class="ar-name"><img src="{{ bank_logos.hdfc }}" class="bank-logo-sm me-1" alt="" onerror="bankLogoError(this,'hdfc')">{{ matched.hdfc }}</span>
-              {% if current.hdfc is not None %}<span class="ar-bal">₹{{ current.hdfc|indian_number }}</span>{% else %}<span class="ar-bal text-muted">—</span>{% endif %}
+              <div class="text-end">
+                {% if current.hdfc is not None %}<span class="ar-bal">₹{{ current.hdfc|indian_number }}</span>{% else %}<span class="ar-bal text-muted">—</span>{% endif %}
+                {% if fd_current.hdfc %}<div style="font-size:.68rem;color:var(--fin-muted);">FD ₹{{ fd_current.hdfc|indian_number }}</div>{% endif %}
+              </div>
             </div>
             <div class="acct-row">
               <span class="ar-name"><img src="{{ bank_logos.idfc }}" class="bank-logo-sm me-1" alt="" onerror="bankLogoError(this,'idfc')">{{ matched.idfc }}</span>
-              {% if current.idfc is not None %}<span class="ar-bal">₹{{ current.idfc|indian_number }}</span>{% else %}<span class="ar-bal text-muted">—</span>{% endif %}
+              <div class="text-end">
+                {% if current.idfc is not None %}<span class="ar-bal">₹{{ current.idfc|indian_number }}</span>{% else %}<span class="ar-bal text-muted">—</span>{% endif %}
+                {% if fd_current.idfc %}<div style="font-size:.68rem;color:var(--fin-muted);">FD ₹{{ fd_current.idfc|indian_number }}</div>{% endif %}
+              </div>
             </div>
             <div class="acct-row">
               <span class="ar-name"><img src="{{ bank_logos.union }}" class="bank-logo-sm me-1" alt="" onerror="bankLogoError(this,'union')">{{ matched.union }}</span>
-              {% if current.union is not None %}<span class="ar-bal">₹{{ current.union|indian_number }}</span>{% else %}<span class="ar-bal text-muted">—</span>{% endif %}
+              <div class="text-end">
+                {% if current.union is not None %}<span class="ar-bal">₹{{ current.union|indian_number }}</span>{% else %}<span class="ar-bal text-muted">—</span>{% endif %}
+                {% if fd_current.union %}<div style="font-size:.68rem;color:var(--fin-muted);">FD ₹{{ fd_current.union|indian_number }}</div>{% endif %}
+              </div>
             </div>
             <div class="acct-row {% if overflow_preview %}over-cap{% endif %}">
               <span class="ar-name"><img src="{{ bank_logos.slice }}" class="bank-logo-sm me-1" alt="" onerror="bankLogoError(this,'slice')">{{ matched.slice }}{% if overflow_preview %} <span style="font-size:.68rem;color:var(--fin-danger);">▲ over cap</span>{% endif %}</span>
@@ -256,6 +267,42 @@
               <option value="union" {% if landing_key == 'union' %}selected{% endif %}>🏢 {{ matched.union }}</option>
             </select>
           </div>
+
+          {# Role recommendation summary #}
+          {% if recommendation %}
+          <div class="mb-3">
+            <div class="section-title mb-1" style="font-size:.82rem;">Account Role Recommendation</div>
+            <div style="font-size:.68rem;color:var(--fin-muted);margin-bottom:.5rem;">
+              <i class="bi bi-cpu me-1"></i>Weighted feature scoring ({{ recommendation.data_freshness }})
+              &nbsp;·&nbsp;
+              <button type="button" id="refresh-rates-btn"
+                      class="btn btn-link p-0 border-0"
+                      style="font-size:.68rem;color:var(--fin-primary);vertical-align:baseline;"
+                      onclick="refreshBankRates()">
+                <i class="bi bi-arrow-clockwise me-1"></i>Refresh rates
+              </button>
+            </div>
+            {% for row in recommendation.display_rows %}
+            <div class="d-flex align-items-center gap-2 mb-1 py-1 px-2 rounded"
+                 style="background:{{ row.colour }}11;border:1px solid {{ row.colour }}33;"
+                 title="{{ row.reason }}">
+              <img src="{{ bank_logos|get_item:row.bank }}" class="bank-logo-sm" alt=""
+                   onerror="bankLogoError(this,'{{ row.bank }}')">
+              <div style="flex:1;min-width:0;">
+                <span style="font-size:.8rem;font-weight:600;color:var(--fin-text);">{{ row.name }}</span>
+                <span class="ms-1 badge rounded-pill"
+                      style="font-size:.65rem;font-weight:700;padding:.15rem .5rem;
+                             background:{{ row.colour }}22;color:{{ row.colour }};border:1px solid {{ row.colour }}55;">
+                  <i class="bi {{ row.icon }} me-1"></i>{{ row.label }}
+                </span>
+              </div>
+              {% if row.score %}
+                <span style="font-size:.7rem;color:var(--fin-muted);">{{ row.score }}/10</span>
+              {% endif %}
+            </div>
+            {% endfor %}
+          </div>
+          {% endif %}
 
           {# Balance caps table #}
           <div class="mb-3">
@@ -688,17 +735,61 @@
         {# Transfers to all other banks #}
         {% for row in result.rows %}
           {% if row.key != result.landing_key %}
-            <div class="d-flex align-items-center gap-3 mb-2 flex-wrap">
-              <span class="t-pill t-out">
-                <i class="bi bi-arrow-right-circle"></i>
-                ₹{{ row.alloc|indian_number }} → {{ row.name }}
-              </span>
-              {% if row.new_bal is not None and not result.pre_exc_out %}
-                <span style="font-size:.81rem;color:var(--fin-muted);">
-                  New balance: <strong style="color:var(--fin-text);">₹{{ row.new_bal|indian_number }}</strong>
+            {% if row.bulk_breakdown %}
+              {# ── Bulk reserve: split into liquid savings + FD ── #}
+              {% with bd=row.bulk_breakdown %}
+              <div class="mb-2">
+                <div class="d-flex align-items-center gap-3 flex-wrap mb-1">
+                  <span class="t-pill t-out">
+                    <i class="bi bi-arrow-right-circle"></i>
+                    ₹{{ row.alloc|indian_number }} → {{ row.name }} (total)
+                  </span>
+                  <span class="badge" style="background:rgba(0,200,150,.12);color:var(--fin-primary);font-size:.68rem;border:1px solid rgba(0,200,150,.25);">
+                    <i class="bi bi-safe me-1"></i>Bulk Reserve
+                  </span>
+                </div>
+                <div class="ms-3 ps-2" style="border-left:2px solid var(--fin-border);font-size:.81rem;color:var(--fin-muted);">
+                  {% if bd.liq_add > 0 %}
+                    <div class="mb-1">
+                      <i class="bi bi-droplet me-1" style="color:#4b9fff;"></i>
+                      <strong style="color:var(--fin-text);">₹{{ bd.liq_add|indian_number }}</strong>
+                      → Liquid savings
+                      <span style="font-size:.73rem;">(keeps total liquid at ₹{{ bd.new_savings|indian_number }})</span>
+                    </div>
+                  {% endif %}
+                  {% if bd.fd_add > 0 %}
+                    <div>
+                      <i class="bi bi-lock me-1" style="color:var(--fin-gold);"></i>
+                      <strong style="color:var(--fin-text);">₹{{ bd.fd_add|indian_number }}</strong>
+                      → {% if bd.has_existing_fd %}Add to existing FD{% else %}Create new FD{% endif %}
+                      {% if bd.fd_rate %}
+                        @ <strong style="color:var(--fin-gold);">{{ bd.fd_rate }}% pa</strong>
+                      {% endif %}
+                      <span style="font-size:.73rem;">(total FD corpus: ₹{{ bd.new_fd|indian_number }})</span>
+                    </div>
+                  {% endif %}
+                  {% if row.new_bal is not None %}
+                    <div class="mt-1" style="font-size:.73rem;">
+                      New total (savings + FD): <strong style="color:var(--fin-text);">₹{{ bd.new_total|indian_number }}</strong>
+                      of ₹{{ bd.liquid_threshold|indian_int }} liquid + ₹{{ bd.new_fd|indian_number }} FD
+                    </div>
+                  {% endif %}
+                </div>
+              </div>
+              {% endwith %}
+            {% else %}
+              <div class="d-flex align-items-center gap-3 mb-2 flex-wrap">
+                <span class="t-pill t-out">
+                  <i class="bi bi-arrow-right-circle"></i>
+                  ₹{{ row.alloc|indian_number }} → {{ row.name }}
                 </span>
-              {% endif %}
-            </div>
+                {% if row.new_bal is not None and not result.pre_exc_out %}
+                  <span style="font-size:.81rem;color:var(--fin-muted);">
+                    New balance: <strong style="color:var(--fin-text);">₹{{ row.new_bal|indian_number }}</strong>
+                  </span>
+                {% endif %}
+              </div>
+            {% endif %}
           {% endif %}
         {% endfor %}
 
@@ -783,6 +874,34 @@
       el.value = el.value.replace(/[,\s]/g, '');
     });
   });
+
+  // Refresh bank rates via POST, update freshness label
+  function refreshBankRates() {
+    const btn = document.getElementById('refresh-rates-btn');
+    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="bi bi-arrow-clockwise spin me-1"></i>Refreshing…'; }
+    fetch('{% url "api_refresh_bank_rates" %}', {
+      method: 'POST',
+      headers: {'X-CSRFToken': document.cookie.match(/csrftoken=([^;]+)/)?.[1] || ''},
+    })
+    .then(r => r.json())
+    .then(d => {
+      if (btn) {
+        if (d.ok) {
+          const ts = d.fetched_at ? new Date(d.fetched_at).toLocaleString('en-IN') : '—';
+          btn.innerHTML = '<i class="bi bi-check-circle me-1" style="color:var(--fin-primary)"></i>Refreshed ' + ts;
+        } else {
+          btn.innerHTML = '<i class="bi bi-exclamation-triangle me-1" style="color:var(--fin-danger)"></i>Refresh failed';
+        }
+        btn.disabled = false;
+      }
+    })
+    .catch(() => { if (btn) { btn.disabled = false; btn.innerHTML = '<i class="bi bi-arrow-clockwise me-1"></i>Refresh rates'; } });
+  }
+
+  // Spinning icon animation for the refresh button
+  document.head.insertAdjacentHTML('beforeend',
+    '<style>@keyframes spin{to{transform:rotate(360deg)}} .spin{display:inline-block;animation:spin .8s linear infinite}</style>'
+  );
 
   // Toggle cap input when "No cap" checkbox changes
   function toggleCap(key) {

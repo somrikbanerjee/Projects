@@ -11,4 +11,5 @@ urlpatterns = [
     path('api/detect-location/', views.api_detect_location, name='api_detect_location'),
     path('delete/<int:year>/<int:month>/', views.delete_budget, name='delete_budget'),
     path('income-splitter/', views.income_splitter, name='income_splitter'),
+    path('api/refresh-bank-rates/', views.api_refresh_bank_rates, name='api_refresh_bank_rates'),
 ]
