@@ -14,7 +14,7 @@ from .models import (
     AppSettings, CATEGORIES, CATEGORY_ICONS,
 )
 from .forms import BudgetInputForm, SplitAdjustmentForm, AppSettingsForm
-from .ml_engine import get_prediction_for_month, pct_to_amounts, CATEGORIES as CATEGORY_KEYS
+from .ml_engine import get_prediction_for_month, pct_to_amounts, CATEGORIES as CATEGORY_KEYS, get_investment_parameters
 from .cost_data import get_or_fetch_cost_snapshot, resolve_city_from_coords, SUPPORTED_CITIES
 from .mmbak_importer import (
     import_actuals_for_month, import_all_available_actuals,
@@ -1218,27 +1218,43 @@ def income_splitter(request):
                 if landing_key not in _SPLITTER_ACCOUNT_KEYS:
                     landing_key = 'slice'
 
+                # Deduction amounts — EMI from constant, rent from Settings, investment step-up
+                splitter_settings = AppSettings.get()
+                emi_amount  = float(_INCOME_FIXED_DED_1)                  # loan EMI → HDFC always
+                rent_amount = float(splitter_settings.rent_amount or 0)   # rent → main spending bank
+                now_dt      = _now_india()
+                inv_amount, _ = get_investment_parameters(now_dt.year, now_dt.month)
+
                 X    = income_input
-                ded1 = 0.0
-                ded2 = 0.0
-                if X >= _INCOME_FIXED_DED_1:
-                    ded1 = float(_INCOME_FIXED_DED_1); X -= ded1
-                if X >= _INCOME_FIXED_DED_2:
-                    ded2 = float(_INCOME_FIXED_DED_2); X -= ded2
+                ded1 = 0.0   # EMI
+                ded2 = 0.0   # Rent
+                ded3 = 0.0   # Investment
+                if X >= emi_amount and emi_amount > 0:
+                    ded1 = emi_amount;  X -= ded1
+                if X >= rent_amount and rent_amount > 0:
+                    ded2 = rent_amount; X -= ded2
+                if X >= inv_amount and inv_amount > 0:
+                    ded3 = inv_amount;  X -= ded3
 
                 distributable = round(X, 2)
                 post_ded1     = round(income_input - ded1, 2)
+                post_ded2     = round(income_input - ded1 - ded2, 2)
 
-                # Base allocations (10 / 20 / 20 / 50%)
-                base = {
+                # Identify role-assigned banks before base computation
+                bulk_bank          = recommendation['assignment'].get('bulk_emergency')
+                main_spending_bank = recommendation['assignment'].get('main_spending', 'hdfc')
+
+                # Base percentage allocations (on distributable only).
+                # Cap check runs on these alone — deductions are added back AFTER capping.
+                alloc_pct = {
                     'slice': round(distributable * 0.10, 2),
                     'idfc':  round(distributable * 0.20, 2),
                     'union': round(distributable * 0.20, 2),
                 }
-                base['hdfc'] = round(income_input - base['slice'] - base['idfc'] - base['union'], 2)
-
-                # Identify bulk reserve bank before any cap computation
-                bulk_bank = recommendation['assignment'].get('bulk_emergency')
+                alloc_pct['hdfc'] = round(
+                    distributable - alloc_pct['slice'] - alloc_pct['idfc'] - alloc_pct['union'], 2
+                )
+                hdfc_var = alloc_pct['hdfc']   # pure percentage portion (for breakdown display)
 
                 # For the bulk reserve bank the cap covers savings + FD combined.
                 # Merge FD balance into savings so the cap functions refuse inflows
@@ -1250,9 +1266,16 @@ def income_splitter(request):
                         cur_known.get(bulk_bank, 0) + (fd_current.get(bulk_bank) or 0), 2
                     )
 
+                # Cap check on pure percentage allocations only
                 income_alloc, income_liq, capped_by_income = _apply_income_caps(
-                    base, effective_current, caps_used
+                    alloc_pct, effective_current, caps_used
                 )
+
+                # Add deductions back on top of capped allocations (bypass cap)
+                final_alloc = dict(income_alloc)
+                final_alloc['hdfc']             = round(final_alloc.get('hdfc', 0) + ded1, 2)
+                final_alloc[main_spending_bank] = round(final_alloc.get(main_spending_bank, 0) + ded2, 2)
+                final_alloc[landing_key]        = round(final_alloc.get(landing_key, 0) + ded3, 2)
 
                 # Pre-existing excess redistribution (independent of income)
                 pre_exc_out, pre_exc_recv, pre_exc_liq = _compute_pre_excess(
@@ -1292,10 +1315,11 @@ def income_splitter(request):
                     }
 
                 # Build per-bank rows
-                base_pct = {'slice': '10 %', 'idfc': '20 %', 'union': '20 %', 'hdfc': 'Rem.'}
+                _base_pct_labels = {'slice': '10 %', 'idfc': '20 %', 'union': '20 %', 'hdfc': 'Rem.'}
                 rows = []
                 for key in _ACCOUNT_ORDER:
-                    alloc    = income_alloc.get(key, 0)
+                    pct_alloc_val = income_alloc.get(key, 0)   # pure pct allocation (after cap/redistrib)
+                    alloc_val     = final_alloc.get(key, 0)    # total incl. deductions routed here
                     cur      = current.get(key)
                     cap      = caps_used.get(key)
                     capped   = key in capped_by_income
@@ -1303,18 +1327,18 @@ def income_splitter(request):
                     pre_recv = pre_exc_recv.get(key, 0)
 
                     if capped:
-                        pv = round(alloc / distributable * 100, 1) if distributable else 0
-                        pct_label = f'{pv} % (capped)' if alloc > 0.005 else '0 % (capped)'
+                        pv = round(pct_alloc_val / distributable * 100, 1) if distributable else 0
+                        pct_label = f'{pv} % (capped)' if pct_alloc_val > 0.005 else '0 % (capped)'
                     else:
-                        pct_label = base_pct[key]
+                        pct_label = _base_pct_labels[key]
 
-                    bd = _bulk_breakdown(key, alloc)
+                    bd = _bulk_breakdown(key, pct_alloc_val)  # bulk breakdown on pct alloc only
                     if bd is not None:
                         # For bulk bank: new_bal = savings + FD combined total
                         new_bal = round(bd['new_total'] + pre_recv - pre_out, 2) if cur is not None else None
                     else:
                         new_bal = (
-                            round(cur + alloc + pre_recv - pre_out, 2)
+                            round(cur + alloc_val + pre_recv - pre_out, 2)
                             if cur is not None else None
                         )
 
@@ -1322,7 +1346,8 @@ def income_splitter(request):
                         'key':           key,
                         'name':          matched[key],
                         'pct':           pct_label,
-                        'alloc':         alloc,
+                        'pct_alloc':     pct_alloc_val,   # pure allocation (for mini-pills)
+                        'alloc':         alloc_val,        # total incl. deductions (for table & What to Do)
                         'bulk_breakdown': bd,
                         'current':  cur,
                         'cap':      cap,
@@ -1332,31 +1357,56 @@ def income_splitter(request):
                         'new_bal':  new_bal,
                     })
 
-                alloc_map = {r['key']: r['alloc'] for r in rows}
-                total_out = round(
-                    sum(v for k, v in alloc_map.items() if k != landing_key), 2
-                )
+                # total_out = everything that leaves the landing account
+                # = transfers to other banks + investment going out to invest
+                total_out = round(income_input - income_alloc.get(landing_key, 0), 2)
+
+                # Step numbers for template rendering
+                _sn = 1
+                step_emi   = (_sn := _sn + 1) if ded1 > 0 else None
+                step_rent  = (_sn := _sn + 1) if ded2 > 0 else None
+                step_inv   = (_sn := _sn + 1) if ded3 > 0 else None
+                _n_ded     = sum(1 for d in [ded1, ded2, ded3] if d > 0)
+                # When no deductions apply, step 2 = "no deductions" informational, step 3 = split
+                step_split = _sn + 1 if _n_ded > 0 else 3
+                step_route = step_split + 1 if _n_ded > 0 else None
 
                 result = {
-                    'income':        income_input,
-                    'ded1':          ded1,
-                    'ded2':          ded2,
-                    'post_ded1':     post_ded1,
-                    'distributable': distributable,
-                    'hdfc_var':      round(base['hdfc'] - ded1 - ded2, 2),
-                    'rows':          rows,
-                    'base':          base,
-                    'landing_key':   landing_key,
-                    'landing_name':  matched[landing_key],
-                    'total_out':     total_out,
-                    'any_cap':       bool(capped_by_income),
-                    'capped_banks':  list(capped_by_income.keys()),
-                    'pre_exc_out':   pre_exc_out,
-                    'pre_exc_recv':  pre_exc_recv,
-                    'income_liq':    income_liq,
-                    'pre_exc_liq':   pre_exc_liq,
-                    'total_liquid':  total_liquid,
-                    'caps':          caps_used,
+                    'income':              income_input,
+                    'ded1':               ded1,
+                    'ded2':               ded2,
+                    'ded3':               ded3,
+                    'ded1_label':         'Loan EMI',
+                    'ded2_label':         'Rent',
+                    'ded3_label':         'Investment',
+                    'emi_bank':           'hdfc',
+                    'emi_bank_name':      matched['hdfc'],
+                    'rent_bank':          main_spending_bank,
+                    'rent_bank_name':     matched[main_spending_bank],
+                    'rent_to_diff_bank':  main_spending_bank != 'hdfc',
+                    'inv_bank':           landing_key,
+                    'inv_bank_name':      matched[landing_key],
+                    'post_ded1':          post_ded1,
+                    'post_ded2':          post_ded2,
+                    'distributable':      distributable,
+                    'hdfc_var':           hdfc_var,   # pure 50% percentage portion
+                    'rows':               rows,
+                    'landing_key':        landing_key,
+                    'landing_name':       matched[landing_key],
+                    'total_out':          total_out,
+                    'any_cap':            bool(capped_by_income),
+                    'capped_banks':       list(capped_by_income.keys()),
+                    'pre_exc_out':        pre_exc_out,
+                    'pre_exc_recv':       pre_exc_recv,
+                    'income_liq':         income_liq,
+                    'pre_exc_liq':        pre_exc_liq,
+                    'total_liquid':       total_liquid,
+                    'caps':               caps_used,
+                    'step_emi':           step_emi,
+                    'step_rent':          step_rent,
+                    'step_inv':           step_inv,
+                    'step_split':         step_split,
+                    'step_route':         step_route,
                 }
 
             except (ValueError, TypeError) as exc:
@@ -1374,8 +1424,9 @@ def income_splitter(request):
         'income_input':     income_input,
         'landing_key':      landing_key,
         'error':            error,
-        'ded1':             _INCOME_FIXED_DED_1,
-        'ded2':             _INCOME_FIXED_DED_2,
+        'ded1':             _INCOME_FIXED_DED_1,                      # EMI — for rules summary
+        'ded2':             float(AppSettings.get().rent_amount or 0), # Rent from settings
+        'ded3':             get_investment_parameters(_now_india().year, _now_india().month)[0],
         'caps_form':          caps_form,
         'default_caps':       _DEFAULT_CAPS,
         'auto_cap_values':    auto_cap_values,

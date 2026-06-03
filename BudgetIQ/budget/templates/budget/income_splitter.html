@@ -420,13 +420,27 @@
           {# Split rules summary #}
           <div class="mb-3 p-3 rounded" style="background:rgba(240,180,41,.07);border:1px solid rgba(240,180,41,.18);font-size:.81rem;color:var(--fin-text-soft);">
             <div style="font-size:.7rem;color:var(--fin-muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:.5rem;">Split rules</div>
-            <div class="d-flex justify-content-between mb-1"><span>Fixed deduction 1</span><span class="text-gold fw-semibold">₹{{ ded1|indian_int }}</span></div>
-            <div class="d-flex justify-content-between mb-2"><span>Fixed deduction 2</span><span class="text-gold fw-semibold">₹{{ ded2|indian_int }}</span></div>
+            <div class="d-flex justify-content-between mb-1">
+              <span>Loan EMI → {{ matched.hdfc }}</span>
+              <span class="text-gold fw-semibold">₹{{ ded1|indian_int }}</span>
+            </div>
+            {% if ded2 > 0 %}
+            <div class="d-flex justify-content-between mb-1">
+              <span>Rent → Main Spending bank</span>
+              <span class="text-gold fw-semibold">₹{{ ded2|indian_int }}</span>
+            </div>
+            {% endif %}
+            {% if ded3 > 0 %}
+            <div class="d-flex justify-content-between mb-2">
+              <span>Investment → {{ matched.slice }}</span>
+              <span class="text-gold fw-semibold">₹{{ ded3|indian_int }}</span>
+            </div>
+            {% endif %}
             <hr style="border-color:var(--fin-border);margin:.3rem 0 .45rem;">
-            <div class="d-flex justify-content-between mb-1"><span>Slice SFB</span><span>10 %</span></div>
-            <div class="d-flex justify-content-between mb-1"><span>IDFC First Bank</span><span>20 %</span></div>
-            <div class="d-flex justify-content-between mb-1"><span>Union Bank of India</span><span>20 %</span></div>
-            <div class="d-flex justify-content-between"><span>HDFC Bank</span><span class="text-fin fw-semibold">remainder + deductions</span></div>
+            <div class="d-flex justify-content-between mb-1"><span>{{ matched.slice }}</span><span>10 %</span></div>
+            <div class="d-flex justify-content-between mb-1"><span>{{ matched.idfc }}</span><span>20 %</span></div>
+            <div class="d-flex justify-content-between mb-1"><span>{{ matched.union }}</span><span>20 %</span></div>
+            <div class="d-flex justify-content-between"><span>{{ matched.hdfc }}</span><span class="text-fin fw-semibold">remainder + deductions</span></div>
           </div>
 
           <div class="d-flex gap-2">
@@ -558,39 +572,56 @@
 
         {% if result.ded1 > 0 %}
         <div class="step-row">
-          <div class="step-badge">2</div>
+          <div class="step-badge">{{ result.step_emi }}</div>
           <div>
-            <div class="step-label">Subtract fixed deduction 1</div>
+            <div class="step-label">Subtract Loan EMI → {{ result.emi_bank_name }}</div>
             <div class="step-eq">₹{{ result.income|indian_number }} − ₹{{ result.ded1|indian_number }}</div>
+            {% if result.ded2 == 0 and result.ded3 == 0 %}
+            <div class="step-value text-fin">Distributable = ₹{{ result.post_ded1|indian_number }}</div>
+            {% else %}
             <div class="step-value text-fin">= ₹{{ result.post_ded1|indian_number }}</div>
+            {% endif %}
           </div>
         </div>
         {% endif %}
 
         {% if result.ded2 > 0 %}
         <div class="step-row">
-          <div class="step-badge">{% if result.ded1 > 0 %}3{% else %}2{% endif %}</div>
+          <div class="step-badge">{{ result.step_rent }}</div>
           <div>
-            <div class="step-label">Subtract fixed deduction 2</div>
+            <div class="step-label">Subtract Rent → {{ result.rent_bank_name }}</div>
             <div class="step-eq">₹{{ result.post_ded1|indian_number }} − ₹{{ result.ded2|indian_number }}</div>
+            {% if result.ded3 == 0 %}
+            <div class="step-value text-fin">Distributable = ₹{{ result.post_ded2|indian_number }}</div>
+            {% else %}
+            <div class="step-value text-fin">= ₹{{ result.post_ded2|indian_number }}</div>
+            {% endif %}
+          </div>
+        </div>
+        {% endif %}
+
+        {% if result.ded3 > 0 %}
+        <div class="step-row">
+          <div class="step-badge">{{ result.step_inv }}</div>
+          <div>
+            <div class="step-label">Subtract Investment → {{ result.inv_bank_name }}</div>
+            <div class="step-eq">₹{{ result.post_ded2|indian_number }} − ₹{{ result.ded3|indian_number }}</div>
             <div class="step-value text-fin">Distributable = ₹{{ result.distributable|indian_number }}</div>
           </div>
         </div>
         {% endif %}
 
-        {% if result.ded1 == 0 and result.ded2 == 0 %}
+        {% if result.ded1 == 0 and result.ded2 == 0 and result.ded3 == 0 %}
         <div class="step-row">
           <div class="step-badge">2</div>
-          <div><div class="step-label">No fixed deductions — full amount is distributable</div>
+          <div><div class="step-label">No deductions apply — full amount is distributable</div>
                <div class="step-value text-fin">₹{{ result.distributable|indian_number }}</div></div>
         </div>
         {% endif %}
 
-        {# Allocation mini-pills #}
+        {# Allocation mini-pills — show pure pct allocation (before deductions added back) #}
         <div class="step-row">
-          <div class="step-badge">
-            {% if result.ded1 > 0 and result.ded2 > 0 %}4{% elif result.ded1 > 0 or result.ded2 > 0 %}3{% else %}3{% endif %}
-          </div>
+          <div class="step-badge">{{ result.step_split }}</div>
           <div style="width:100%;">
             <div class="step-label mb-2">
               Base split on ₹{{ result.distributable|indian_number }}
@@ -601,7 +632,7 @@
               <div class="col-6 col-md-3">
                 <div class="alloc-mini {% if row.capped %}capped{% elif row.key == 'hdfc' %}hdfc{% endif %}">
                   <div class="am-label">{{ row.name }}</div>
-                  <div class="am-amt">₹{{ row.alloc|indian_number }}</div>
+                  <div class="am-amt">₹{{ row.pct_alloc|indian_number }}</div>
                   <div class="am-pct">{{ row.pct }}</div>
                 </div>
               </div>
@@ -610,21 +641,38 @@
           </div>
         </div>
 
-        {% if result.ded1 > 0 or result.ded2 > 0 %}
+        {% if result.ded1 > 0 or result.ded2 > 0 or result.ded3 > 0 %}
         <div class="step-row">
-          <div class="step-badge">
-            {% if result.ded1 > 0 and result.ded2 > 0 %}5{% else %}4{% endif %}
-          </div>
+          <div class="step-badge">{{ result.step_route }}</div>
           <div>
-            <div class="step-label">Add fixed deductions to HDFC</div>
+            <div class="step-label">Route deductions back to designated accounts</div>
+            {% if result.ded1 > 0 %}
             <div class="step-eq">
-              ₹{{ result.hdfc_var|indian_number }} (variable)
-              {% if result.ded1 > 0 %} + ₹{{ result.ded1|indian_number }}{% endif %}
-              {% if result.ded2 > 0 %} + ₹{{ result.ded2|indian_number }}{% endif %}
+              EMI ₹{{ result.ded1|indian_number }} → {{ result.emi_bank_name }}
+              {% for row in result.rows %}{% if row.key == result.emi_bank %}
+                (total ₹{{ row.alloc|indian_number }})
+              {% endif %}{% endfor %}
             </div>
-            {% for row in result.rows %}{% if row.key == 'hdfc' %}
-            <div class="step-value text-fin">HDFC total = ₹{{ row.alloc|indian_number }}</div>
-            {% endif %}{% endfor %}
+            {% endif %}
+            {% if result.ded2 > 0 %}
+            <div class="step-eq">
+              Rent ₹{{ result.ded2|indian_number }} → {{ result.rent_bank_name }}
+              {% if result.rent_to_diff_bank %}
+                {% for row in result.rows %}{% if row.key == result.rent_bank %}
+                  (total ₹{{ row.alloc|indian_number }})
+                {% endif %}{% endfor %}
+              {% endif %}
+            </div>
+            {% endif %}
+            {% if result.ded3 > 0 %}
+            <div class="step-eq">
+              Investment ₹{{ result.ded3|indian_number }} → {{ result.inv_bank_name }}
+              {% for row in result.rows %}{% if row.key == result.inv_bank %}
+                (total ₹{{ row.alloc|indian_number }})
+              {% endif %}{% endfor %}
+              <span style="font-size:.71rem;color:var(--fin-muted);">— to be invested from here</span>
+            </div>
+            {% endif %}
           </div>
         </div>
         {% endif %}
